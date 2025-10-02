@@ -10,65 +10,43 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AppointmentCard } from "@/components/AppointmentCard";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
+import type { Appointment, Therapist, User } from "@shared/schema";
 
 export default function Appointments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const appointments = [
-    {
-      id: "1",
-      time: "09:00 - 10:00",
-      clientName: "Ana Martínez",
-      therapistName: "Dr. María González",
-      status: "confirmed" as const,
-      date: "Lun 04/10",
-    },
-    {
-      id: "2",
-      time: "10:00 - 11:00",
-      clientName: "Carlos Rodríguez",
-      therapistName: "Dr. Juan Pérez",
-      status: "confirmed" as const,
-      date: "Lun 04/10",
-    },
-    {
-      id: "3",
-      time: "11:00 - 12:00",
-      clientName: "Laura Fernández",
-      therapistName: "Dra. Carmen López",
-      status: "pending" as const,
-      date: "Lun 04/10",
-    },
-    {
-      id: "4",
-      time: "14:00 - 15:00",
-      clientName: "Pedro García",
-      therapistName: "Dr. Roberto Martín",
-      status: "confirmed" as const,
-      date: "Mar 05/10",
-    },
-    {
-      id: "5",
-      time: "15:00 - 16:00",
-      clientName: "Isabel Ruiz",
-      therapistName: "Dra. Ana Sánchez",
-      status: "pending" as const,
-      date: "Mar 05/10",
-    },
-    {
-      id: "6",
-      time: "16:00 - 17:00",
-      clientName: "Miguel Torres",
-      therapistName: "Dr. Luis Rodríguez",
-      status: "cancelled" as const,
-      date: "Mar 05/10",
-    },
-  ];
+  const { data: appointments = [], isLoading } = useQuery<Appointment[]>({
+    queryKey: ["/api/appointments"],
+  });
 
-  const filteredAppointments = appointments.filter((apt) => {
+  const { data: therapists = [] } = useQuery<Therapist[]>({
+    queryKey: ["/api/therapists"],
+  });
+
+  const { data: clients = [] } = useQuery<User[]>({
+    queryKey: ["/api/clients"],
+  });
+
+  const appointmentsWithDetails = appointments.map((apt) => {
+    const therapist = therapists.find((t) => t.id === apt.therapistId);
+    const client = clients.find((c) => c.id === apt.clientId);
+    const date = new Date(apt.date);
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    
+    return {
+      ...apt,
+      clientName: client
+        ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente'
+        : 'Cliente desconocido',
+      therapistName: therapist?.name || 'Terapeuta desconocido',
+      dateFormatted: `${dayNames[date.getDay()]} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`,
+    };
+  });
+
+  const filteredAppointments = appointmentsWithDetails.filter((apt) => {
     const matchesSearch =
       apt.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       apt.therapistName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -80,6 +58,14 @@ export default function Appointments() {
   const pendingCount = appointments.filter((a) => a.status === "pending").length;
   const cancelledCount = appointments.filter((a) => a.status === "cancelled").length;
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Cargando citas...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -89,7 +75,7 @@ export default function Appointments() {
             Gestiona todas las citas del centro
           </p>
         </div>
-        <Button data-testid="button-new-appointment">
+        <Button data-testid="button-new-appointment" onClick={() => console.log('New appointment')}>
           <Plus className="h-4 w-4 mr-2" />
           Nueva cita
         </Button>
@@ -152,26 +138,30 @@ export default function Appointments() {
         </Select>
       </div>
 
-      <div className="space-y-3">
-        {filteredAppointments.map((apt) => (
-          <div key={apt.id}>
-            <div className="text-xs font-medium text-muted-foreground uppercase mb-2">
-              {apt.date}
-            </div>
-            <AppointmentCard
-              {...apt}
-              onEdit={(id) => console.log('Editar:', id)}
-              onCancel={(id) => console.log('Cancelar:', id)}
-            />
+      <div className="space-y-4">
+        {filteredAppointments.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            No se encontraron citas
           </div>
-        ))}
+        ) : (
+          filteredAppointments.map((apt) => (
+            <div key={apt.id}>
+              <div className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                {apt.dateFormatted}
+              </div>
+              <AppointmentCard
+                id={apt.id}
+                time={`${apt.startTime} - ${apt.endTime}`}
+                clientName={apt.clientName}
+                therapistName={apt.therapistName}
+                status={apt.status as "confirmed" | "pending" | "cancelled"}
+                onEdit={(id) => console.log('Editar:', id)}
+                onCancel={(id) => console.log('Cancelar:', id)}
+              />
+            </div>
+          ))
+        )}
       </div>
-
-      {filteredAppointments.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          No se encontraron citas
-        </div>
-      )}
     </div>
   );
 }

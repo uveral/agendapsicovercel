@@ -10,61 +10,58 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import type { Therapist, Appointment } from "@shared/schema";
 
 export default function Therapists() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("all");
 
-  const therapists = [
-    {
-      id: "1",
-      name: "Dr. María González",
-      specialty: "Psicología Clínica",
-      availability: 75,
-      upcomingAppointments: 12,
-    },
-    {
-      id: "2",
-      name: "Dr. Juan Pérez",
-      specialty: "Terapia Cognitiva",
-      availability: 45,
-      upcomingAppointments: 18,
-    },
-    {
-      id: "3",
-      name: "Dra. Carmen López",
-      specialty: "Psicología Infantil",
-      availability: 82,
-      upcomingAppointments: 9,
-    },
-    {
-      id: "4",
-      name: "Dr. Roberto Martín",
-      specialty: "Terapia de Pareja",
-      availability: 68,
-      upcomingAppointments: 14,
-    },
-    {
-      id: "5",
-      name: "Dra. Ana Sánchez",
-      specialty: "Psicología Clínica",
-      availability: 91,
-      upcomingAppointments: 6,
-    },
-    {
-      id: "6",
-      name: "Dr. Luis Rodríguez",
-      specialty: "Terapia Cognitiva",
-      availability: 55,
-      upcomingAppointments: 16,
-    },
-  ];
+  const { data: therapists = [], isLoading } = useQuery<Therapist[]>({
+    queryKey: ["/api/therapists"],
+  });
 
-  const filteredTherapists = therapists.filter((t) => {
+  const { data: appointments = [] } = useQuery<Appointment[]>({
+    queryKey: ["/api/appointments"],
+  });
+
+  // Get unique specialties
+  const specialties = Array.from(new Set(therapists.map((t) => t.specialty)));
+
+  // Calculate stats for each therapist
+  const therapistsWithStats = therapists.map((therapist) => {
+    const therapistAppointments = appointments.filter(
+      (apt) => apt.therapistId === therapist.id && apt.status !== "cancelled"
+    );
+    
+    const today = new Date();
+    const upcomingAppointments = therapistAppointments.filter(
+      (apt) => new Date(apt.date) >= today
+    ).length;
+
+    // Calculate availability (simplified: 100 - percentage of busy slots)
+    const availability = Math.max(0, 100 - (therapistAppointments.length * 5));
+
+    return {
+      ...therapist,
+      availability,
+      upcomingAppointments,
+    };
+  });
+
+  const filteredTherapists = therapistsWithStats.filter((t) => {
     const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSpecialty = filterSpecialty === "all" || t.specialty === filterSpecialty;
     return matchesSearch && matchesSpecialty;
   });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Cargando terapeutas...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -75,7 +72,7 @@ export default function Therapists() {
             Gestiona los {therapists.length} terapeutas del centro
           </p>
         </div>
-        <Button data-testid="button-add-therapist">
+        <Button data-testid="button-add-therapist" onClick={() => console.log('Add therapist')}>
           <Plus className="h-4 w-4 mr-2" />
           Nuevo terapeuta
         </Button>
@@ -98,10 +95,11 @@ export default function Therapists() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="Psicología Clínica">Psicología Clínica</SelectItem>
-            <SelectItem value="Terapia Cognitiva">Terapia Cognitiva</SelectItem>
-            <SelectItem value="Psicología Infantil">Psicología Infantil</SelectItem>
-            <SelectItem value="Terapia de Pareja">Terapia de Pareja</SelectItem>
+            {specialties.map((specialty) => (
+              <SelectItem key={specialty} value={specialty}>
+                {specialty}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

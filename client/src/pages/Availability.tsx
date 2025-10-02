@@ -1,14 +1,70 @@
+import { useState } from "react";
 import { AvailabilityForm } from "@/components/AvailabilityForm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { ClientAvailability } from "@shared/schema";
 
 export default function Availability() {
-  const currentAvailability = {
-    lastUpdated: "28 Sep 2024",
-    totalSlots: 15,
-    days: ["Lunes", "Martes", "Miércoles", "Jueves"],
+  const { toast } = useToast();
+
+  const { data: availability = [], isLoading } = useQuery<ClientAvailability[]>({
+    queryKey: ["/api/availability"],
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: any[]) => {
+      return await apiRequest("/api/availability", "POST", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/availability"] });
+      toast({
+        title: "Disponibilidad guardada",
+        description: "Tu disponibilidad ha sido actualizada correctamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo guardar la disponibilidad",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSave = (data: any[]) => {
+    const enabledDays = data.filter((d) => d.enabled);
+    const availabilityData = enabledDays.flatMap((day) => {
+      const dayIndex = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].indexOf(day.day);
+      return day.timeSlots
+        .filter((slot: any) => slot.selected)
+        .map((slot: any) => {
+          const [start, end] = slot.time.split('-');
+          return {
+            dayOfWeek: dayIndex + 1, // Monday = 1
+            startTime: start,
+            endTime: end,
+          };
+        });
+    });
+
+    saveMutation.mutate(availabilityData);
   };
+
+  const dayNames = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const uniqueDays = Array.from(new Set(availability.map((a) => a.dayOfWeek)));
+  const daysAvailable = uniqueDays.map((d) => dayNames[d]).filter(Boolean);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Cargando disponibilidad...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -19,43 +75,43 @@ export default function Availability() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Estado Actual</CardTitle>
-          <CardDescription>
-            Última actualización: {currentAvailability.lastUpdated}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="font-medium">{currentAvailability.days.length}</span> días disponibles
-              </span>
+      {availability.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Estado Actual</CardTitle>
+            <CardDescription>
+              Última actualización: {new Date().toLocaleDateString('es-ES')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="font-medium">{daysAvailable.length}</span> días disponibles
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="font-medium">{availability.length}</span> franjas horarias
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="font-medium">{currentAvailability.totalSlots}</span> franjas horarias
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {currentAvailability.days.map((day) => (
-              <Badge key={day} variant="secondary">
-                {day}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            {daysAvailable.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {daysAvailable.map((day) => (
+                  <Badge key={day} variant="secondary">
+                    {day}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      <AvailabilityForm
-        onSave={(data) => {
-          console.log('Disponibilidad guardada:', data);
-        }}
-      />
+      <AvailabilityForm onSave={handleSave} />
     </div>
   );
 }

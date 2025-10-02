@@ -3,70 +3,70 @@ import { Input } from "@/components/ui/input";
 import { Search, Plus, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ClientCard } from "@/components/ClientCard";
-import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
+import type { User, Appointment, ClientAvailability } from "@shared/schema";
 
 export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyWithAvailability, setShowOnlyWithAvailability] = useState(false);
 
-  const clients = [
-    {
-      id: "1",
-      name: "Ana Martínez López",
-      email: "ana.martinez@email.com",
-      phone: "+34 612 345 678",
-      hasAvailability: true,
-      nextAppointment: "Lun 15:00",
-    },
-    {
-      id: "2",
-      name: "Carlos Rodríguez",
-      email: "carlos.rodriguez@email.com",
-      phone: "+34 623 456 789",
-      hasAvailability: true,
-      nextAppointment: "Mar 10:00",
-    },
-    {
-      id: "3",
-      name: "Laura Fernández",
-      email: "laura.fernandez@email.com",
-      phone: "+34 634 567 890",
-      hasAvailability: false,
-    },
-    {
-      id: "4",
-      name: "Pedro García",
-      email: "pedro.garcia@email.com",
-      phone: "+34 645 678 901",
-      hasAvailability: true,
-      nextAppointment: "Mié 16:00",
-    },
-    {
-      id: "5",
-      name: "Isabel Ruiz",
-      email: "isabel.ruiz@email.com",
-      phone: "+34 656 789 012",
-      hasAvailability: false,
-    },
-    {
-      id: "6",
-      name: "Miguel Torres",
-      email: "miguel.torres@email.com",
-      phone: "+34 667 890 123",
-      hasAvailability: true,
-      nextAppointment: "Jue 14:00",
-    },
-  ];
+  const { data: clients = [], isLoading } = useQuery<User[]>({
+    queryKey: ["/api/clients"],
+  });
 
-  const filteredClients = clients.filter((c) => {
+  const { data: appointments = [] } = useQuery<Appointment[]>({
+    queryKey: ["/api/appointments"],
+  });
+
+  // For simplicity, we'll check if clients have availability by looking at appointments
+  // In a real scenario, we'd query the availability endpoint for each client
+  const clientsWithStats = clients.map((client) => {
+    const clientAppointments = appointments.filter(
+      (apt) => apt.clientId === client.id && apt.status !== "cancelled"
+    );
+    
+    const today = new Date();
+    const upcomingAppointments = clientAppointments.filter(
+      (apt) => new Date(apt.date) >= today
+    );
+
+    const nextAppointment = upcomingAppointments[0];
+    let nextAppointmentText;
+    
+    if (nextAppointment) {
+      const date = new Date(nextAppointment.date);
+      const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      nextAppointmentText = `${dayNames[date.getDay()]} ${nextAppointment.startTime}`;
+    }
+
+    // Consider a client has availability if they have upcoming appointments
+    const hasAvailability = clientAppointments.length > 0;
+
+    return {
+      ...client,
+      hasAvailability,
+      nextAppointment: nextAppointmentText,
+    };
+  });
+
+  const filteredClients = clientsWithStats.filter((c) => {
     const matchesSearch = 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.email.toLowerCase().includes(searchQuery.toLowerCase());
+      c.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.email?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = !showOnlyWithAvailability || c.hasAvailability;
     return matchesSearch && matchesFilter;
   });
 
-  const clientsWithAvailability = clients.filter((c) => c.hasAvailability).length;
+  const clientsWithAvailability = clientsWithStats.filter((c) => c.hasAvailability).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Cargando clientes...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -74,10 +74,10 @@ export default function Clients() {
         <div>
           <h1 className="text-2xl font-semibold mb-1">Clientes</h1>
           <p className="text-muted-foreground">
-            {clients.length} clientes registrados · {clientsWithAvailability} con disponibilidad
+            {clients.length} clientes registrados · {clientsWithAvailability} con citas
           </p>
         </div>
-        <Button data-testid="button-add-client">
+        <Button data-testid="button-add-client" onClick={() => console.log('Add client')}>
           <Plus className="h-4 w-4 mr-2" />
           Nuevo cliente
         </Button>
@@ -100,7 +100,7 @@ export default function Clients() {
           data-testid="button-filter-availability"
         >
           <Filter className="h-4 w-4 mr-2" />
-          Con disponibilidad
+          Con citas
         </Button>
       </div>
 
@@ -108,7 +108,12 @@ export default function Clients() {
         {filteredClients.map((client) => (
           <ClientCard
             key={client.id}
-            {...client}
+            id={client.id}
+            name={`${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email || 'Usuario'}
+            email={client.email || ''}
+            phone="+34 XXX XXX XXX"
+            hasAvailability={client.hasAvailability}
+            nextAppointment={client.nextAppointment}
             onViewDetails={(id) => console.log('Ver detalles:', id)}
           />
         ))}

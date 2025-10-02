@@ -9,62 +9,82 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Grid3x3, LayoutGrid } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import type { Therapist, Appointment, User } from "@shared/schema";
 
 export default function Calendar() {
   const [selectedTherapist, setSelectedTherapist] = useState("all");
   const [viewMode, setViewMode] = useState<"single" | "multi">("single");
 
-  const therapists = [
+  const { data: therapists = [], isLoading } = useQuery<Therapist[]>({
+    queryKey: ["/api/therapists"],
+  });
+
+  const { data: appointments = [] } = useQuery<Appointment[]>({
+    queryKey: ["/api/appointments"],
+  });
+
+  const { data: clients = [] } = useQuery<User[]>({
+    queryKey: ["/api/clients"],
+  });
+
+  // Generate week schedule for a therapist
+  const generateScheduleForTherapist = (therapistId: string) => {
+    const therapistAppointments = appointments.filter(
+      (apt) => apt.therapistId === therapistId && apt.status !== "cancelled"
+    );
+
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay() + 1); // Start on Monday
+
+    const schedule = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + i);
+      
+      const daySlots = therapistAppointments
+        .filter((apt) => {
+          const aptDate = new Date(apt.date);
+          return aptDate.toDateString() === date.toDateString();
+        })
+        .map((apt) => {
+          const client = clients.find((c) => c.id === apt.clientId);
+          const clientName = client
+            ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente'
+            : 'Cliente';
+
+          return {
+            id: apt.id,
+            time: apt.startTime,
+            client: clientName,
+            status: apt.status as "confirmed" | "pending",
+          };
+        });
+
+      schedule.push({
+        day: dayNames[date.getDay()],
+        date: `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`,
+        slots: daySlots,
+      });
+    }
+
+    return schedule;
+  };
+
+  const therapistsList = [
     { id: "all", name: "Todos los terapeutas" },
-    { id: "1", name: "Dr. María González" },
-    { id: "2", name: "Dr. Juan Pérez" },
-    { id: "3", name: "Dra. Carmen López" },
-    { id: "4", name: "Dr. Roberto Martín" },
+    ...therapists.map((t) => ({ id: t.id, name: t.name })),
   ];
 
-  const mockSchedule = [
-    {
-      day: "Lun",
-      date: "04/10",
-      slots: [
-        { id: "1", time: "9:00", client: "Ana M.", status: "confirmed" as const },
-        { id: "2", time: "11:00", client: "Pedro L.", status: "pending" as const },
-        { id: "3", time: "14:00", client: "Carlos R.", status: "confirmed" as const },
-      ],
-    },
-    {
-      day: "Mar",
-      date: "05/10",
-      slots: [
-        { id: "4", time: "10:00", client: "María G.", status: "confirmed" as const },
-        { id: "5", time: "16:00", client: "Laura F.", status: "pending" as const },
-      ],
-    },
-    {
-      day: "Mié",
-      date: "06/10",
-      slots: [
-        { id: "6", time: "9:00", client: "Isabel R.", status: "confirmed" as const },
-        { id: "7", time: "14:00", client: "Miguel T.", status: "confirmed" as const },
-      ],
-    },
-    {
-      day: "Jue",
-      date: "07/10",
-      slots: [
-        { id: "8", time: "11:00", client: "Pedro G.", status: "pending" as const },
-      ],
-    },
-    {
-      day: "Vie",
-      date: "08/10",
-      slots: [
-        { id: "9", time: "15:00", client: "Ana M.", status: "confirmed" as const },
-      ],
-    },
-    { day: "Sáb", date: "09/10", slots: [] },
-    { day: "Dom", date: "10/10", slots: [] },
-  ];
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Cargando calendario...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,7 +101,7 @@ export default function Calendar() {
             <SelectValue placeholder="Seleccionar terapeuta" />
           </SelectTrigger>
           <SelectContent>
-            {therapists.map((therapist) => (
+            {therapistsList.map((therapist) => (
               <SelectItem key={therapist.id} value={therapist.id}>
                 {therapist.name}
               </SelectItem>
@@ -112,22 +132,27 @@ export default function Calendar() {
       <div className="space-y-6">
         {viewMode === "single" && selectedTherapist !== "all" && (
           <WeekCalendar
-            therapistName={therapists.find((t) => t.id === selectedTherapist)?.name || ""}
-            schedule={mockSchedule}
+            therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
+            schedule={generateScheduleForTherapist(selectedTherapist)}
             onSlotClick={(id) => console.log('Slot clicked:', id)}
           />
         )}
 
         {viewMode === "multi" || selectedTherapist === "all" ? (
           <div className="space-y-6">
-            {therapists.slice(1, 3).map((therapist) => (
+            {therapists.slice(0, 3).map((therapist) => (
               <WeekCalendar
                 key={therapist.id}
                 therapistName={therapist.name}
-                schedule={mockSchedule}
+                schedule={generateScheduleForTherapist(therapist.id)}
                 onSlotClick={(id) => console.log('Slot clicked:', id)}
               />
             ))}
+            {therapists.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                No hay terapeutas registrados
+              </div>
+            )}
           </div>
         ) : null}
 
