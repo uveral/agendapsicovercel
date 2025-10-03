@@ -114,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Client routes
-  app.get('/api/clients', isAuthenticated, isAdmin, async (req, res) => {
+  app.get('/api/clients', isAuthenticated, async (req, res) => {
     try {
       const clients = await storage.getAllClients();
       res.json(clients);
