@@ -10,7 +10,34 @@ This is a comprehensive scheduling management system designed for a psychology c
 
 ## Recent Changes
 
-**October 3, 2025** - Complete Recurring Appointment System Implementation
+**October 3, 2025 (PM)** - Major UX Improvements and Settings System
+
+**Comprehensive System Enhancements:**
+1. **PDF Logo Fix**: Corrected aspect ratio distortion (4.54:1) using Sharp's fit:'inside' option
+2. **TherapistDetail Editing**: Admins can now edit email, color, specialty, and working hours
+3. **Client Management**: 
+   - Fixed availability editor validation bug (userId field)
+   - Added phone field to clients schema
+   - Enabled client data editing (firstName, lastName, email, phone)
+   - Added appointment editing directly from ClientDetail page
+4. **Appointment Creation Improvements**:
+   - Default frequency changed to "semanal" (weekly)
+   - Time selectors limited to :00 and :30 minutes
+   - Removed end time input, added duration field (default 60 min)
+   - Auto-creates 104 sessions for weekly, 52 for biweekly (2-year schedule)
+5. **Calendar Redesign**:
+   - **Vista General**: Changed to monthly view with navigation (◀ ▶ Hoy)
+   - Reduced square size (w-2 h-2) to accommodate 10-12 therapists
+   - Days display as 1-31 with weekday letters (D L M X J V S)
+   - **Vista Individual**: New MonthCalendar component, compact design, fixed appointment display bug
+6. **Therapist Selector**: Added dropdown to switch between therapists, role-based defaults
+7. **Settings Page (Admin-only)**:
+   - New /settings route with database-backed configuration
+   - Toggle: "Permitir a terapeutas editar citas de otros terapeutas"
+   - Integrated with canManageAppointment middleware
+8. **Permission Controls**: Therapists blocked from editing other therapists' details/schedules
+
+**October 3, 2025 (AM)** - Complete Recurring Appointment System Implementation
 
 **Milestone 1: Schema, Permissions & API Foundation**
 - Extended appointment schema with recurring appointment support:

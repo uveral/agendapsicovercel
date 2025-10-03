@@ -73,9 +73,6 @@ export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: 
     });
   };
 
-  // Dynamic grid columns: 1 for hour label + daysInMonth for each day
-  const gridCols = `grid-cols-[auto_repeat(${daysInMonth},minmax(40px,1fr))]`;
-
   return (
     <Card>
       <CardHeader>
@@ -121,7 +118,12 @@ export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: 
       <CardContent>
         <div className="overflow-x-auto">
           <div className="inline-block min-w-full">
-            <div className={`grid ${gridCols} gap-1`}>
+            <div 
+              className="grid gap-1"
+              style={{
+                gridTemplateColumns: `auto repeat(${daysInMonth}, minmax(40px, 1fr))`
+              }}
+            >
               {/* Header row */}
               <div className="text-xs font-medium text-muted-foreground uppercase p-2 sticky left-0 bg-card z-10">
                 Hora

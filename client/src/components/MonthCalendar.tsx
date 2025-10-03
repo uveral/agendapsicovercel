@@ -87,9 +87,6 @@ export function MonthCalendar({
     return `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
   };
 
-  // Dynamic grid columns: 1 for hour label + daysInMonth for each day
-  const gridCols = `grid-cols-[auto_repeat(${daysInMonth},minmax(50px,1fr))]`;
-
   return (
     <Card>
       <CardHeader>
@@ -130,7 +127,12 @@ export function MonthCalendar({
       <CardContent>
         <div className="overflow-x-auto">
           <div className="inline-block min-w-full">
-            <div className={`grid ${gridCols} gap-0.5`}>
+            <div 
+              className="grid gap-0.5"
+              style={{
+                gridTemplateColumns: `auto repeat(${daysInMonth}, minmax(50px, 1fr))`
+              }}
+            >
               {/* Header row */}
               <div className="text-[10px] font-medium text-muted-foreground uppercase p-1 sticky left-0 bg-card z-10">
                 Hora
