@@ -5,9 +5,10 @@ import type { Therapist, Appointment } from "@shared/schema";
 interface OccupancyGridProps {
   therapists: Therapist[];
   appointments: Appointment[];
+  onAppointmentClick?: (appointmentId: string) => void;
 }
 
-export function OccupancyGrid({ therapists, appointments }: OccupancyGridProps) {
+export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: OccupancyGridProps) {
   const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
   const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   
@@ -22,9 +23,9 @@ export function OccupancyGrid({ therapists, appointments }: OccupancyGridProps) 
     return date;
   });
 
-  // Check if a therapist has an appointment at a specific time
-  const hasAppointment = (therapistId: string, date: Date, hour: number): boolean => {
-    return appointments.some((apt) => {
+  // Find appointment for a therapist at a specific time
+  const getAppointment = (therapistId: string, date: Date, hour: number): Appointment | undefined => {
+    return appointments.find((apt) => {
       if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
       
       const aptDate = new Date(apt.date);
@@ -79,22 +80,28 @@ export function OccupancyGrid({ therapists, appointments }: OccupancyGridProps) 
                       data-testid={`occupancy-${dayNames[dayIndex]}-${hour}`}
                     >
                       {therapists.map((therapist) => {
-                        const isOccupied = hasAppointment(therapist.id, date, hour);
+                        const appointment = getAppointment(therapist.id, date, hour);
+                        const isOccupied = !!appointment;
                         return (
                           <div key={therapist.id}>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div
-                                  className={`w-4 h-4 rounded-sm transition-transform hover:scale-125 cursor-pointer`}
+                                  className={`w-4 h-4 rounded-sm transition-transform hover:scale-125 ${isOccupied ? 'cursor-pointer' : 'cursor-default'}`}
                                   style={{
                                     backgroundColor: isOccupied ? therapist.color : '#d1d5db',
+                                  }}
+                                  onClick={() => {
+                                    if (appointment && onAppointmentClick) {
+                                      onAppointmentClick(appointment.id);
+                                    }
                                   }}
                                   data-testid={`square-${therapist.id}-${dayNames[dayIndex]}-${hour}`}
                                 />
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p className="font-medium">{therapist.name}</p>
-                                <p className="text-xs">{isOccupied ? 'Ocupado' : 'Disponible'}</p>
+                                <p className="text-xs">{isOccupied ? 'Ocupado - Click para editar' : 'Disponible'}</p>
                               </TooltipContent>
                             </Tooltip>
                           </div>

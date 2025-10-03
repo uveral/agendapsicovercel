@@ -435,6 +435,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/appointments/:id/series', isAuthenticated, canManageAppointment, async (req, res) => {
+    try {
+      const scope = req.query.scope as "this_only" | "this_and_future";
+      
+      if (!scope || (scope !== "this_only" && scope !== "this_and_future")) {
+        return res.status(400).json({ message: "Invalid scope. Must be 'this_only' or 'this_and_future'" });
+      }
+      
+      await storage.deleteAppointmentSeries(req.params.id, scope);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting appointment series:", error);
+      res.status(500).json({ message: "Failed to delete appointment series" });
+    }
+  });
+
+  app.patch('/api/appointments/:id/series', isAuthenticated, canManageAppointment, async (req: any, res) => {
+    try {
+      const scope = req.query.scope as "this_only" | "this_and_future";
+      
+      if (!scope || (scope !== "this_only" && scope !== "this_and_future")) {
+        return res.status(400).json({ message: "Invalid scope. Must be 'this_only' or 'this_and_future'" });
+      }
+
+      const user = await storage.getUser(req.user.claims.sub);
+      const body = { ...req.body };
+      
+      if (user?.role === 'therapist') {
+        delete body.therapistId;
+      }
+      
+      const appointments = await storage.updateAppointmentSeries(req.params.id, scope, body);
+      res.json(appointments);
+    } catch (error) {
+      console.error("Error updating appointment series:", error);
+      res.status(500).json({ message: "Failed to update appointment series" });
+    }
+  });
+
+  app.patch('/api/appointments/:id/frequency', isAuthenticated, canManageAppointment, async (req, res) => {
+    try {
+      const { frequency } = req.body;
+      
+      if (!frequency || (frequency !== "semanal" && frequency !== "quincenal")) {
+        return res.status(400).json({ message: "Invalid frequency. Must be 'semanal' or 'quincenal'" });
+      }
+      
+      const appointments = await storage.changeSeriesFrequency(req.params.id, frequency);
+      res.json(appointments);
+    } catch (error) {
+      console.error("Error changing series frequency:", error);
+      res.status(500).json({ message: "Failed to change series frequency" });
+    }
+  });
+
   // Suggestions endpoint - finds alternative appointment slots
   app.post('/api/appointments/suggest', isAuthenticated, isAdmin, async (req, res) => {
     try {

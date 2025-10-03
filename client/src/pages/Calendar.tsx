@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
+import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ export default function Calendar() {
   
   const [selectedTherapist, setSelectedTherapist] = useState(therapistParam || "all");
   const [viewType, setViewType] = useState<"general" | "individual">(therapistParam ? "individual" : "general");
+  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
 
   const { data: therapists = [], isLoading } = useQuery<Therapist[]>({
     queryKey: ["/api/therapists"],
@@ -149,7 +151,11 @@ export default function Calendar() {
         </div>
 
         <TabsContent value="general" className="space-y-6 mt-6">
-          <OccupancyGrid therapists={therapists} appointments={appointments} />
+          <OccupancyGrid 
+            therapists={therapists} 
+            appointments={appointments}
+            onAppointmentClick={(id) => setEditingAppointmentId(id)}
+          />
         </TabsContent>
 
         <TabsContent value="individual" className="space-y-6 mt-6">
@@ -157,7 +163,7 @@ export default function Calendar() {
             <WeekCalendar
               therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
               schedule={generateScheduleForTherapist(selectedTherapist)}
-              onSlotClick={(id) => console.log('Slot clicked:', id)}
+              onSlotClick={(id) => setEditingAppointmentId(id)}
             />
           ) : (
             <div className="space-y-6">
@@ -166,7 +172,7 @@ export default function Calendar() {
                   key={therapist.id}
                   therapistName={therapist.name}
                   schedule={generateScheduleForTherapist(therapist.id)}
-                  onSlotClick={(id) => console.log('Slot clicked:', id)}
+                  onSlotClick={(id) => setEditingAppointmentId(id)}
                 />
               ))}
               {therapists.length === 0 && (
@@ -178,6 +184,11 @@ export default function Calendar() {
           )}
         </TabsContent>
       </Tabs>
+
+      <AppointmentEditDialog
+        appointmentId={editingAppointmentId}
+        onClose={() => setEditingAppointmentId(null)}
+      />
     </div>
   );
 }

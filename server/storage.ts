@@ -46,6 +46,9 @@ export interface IStorage {
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
   updateAppointment(id: string, appointment: Partial<InsertAppointment>): Promise<Appointment>;
   deleteAppointment(id: string): Promise<void>;
+  deleteAppointmentSeries(appointmentId: string, scope: "this_only" | "this_and_future"): Promise<void>;
+  updateAppointmentSeries(appointmentId: string, scope: "this_only" | "this_and_future", data: Partial<InsertAppointment>): Promise<Appointment[]>;
+  changeSeriesFrequency(appointmentId: string, newFrequency: "semanal" | "quincenal"): Promise<Appointment[]>;
   
   // Client operations
   getAllClients(): Promise<User[]>;
@@ -226,6 +229,111 @@ export class DatabaseStorage implements IStorage {
     }
     
     return created;
+  }
+
+  async deleteAppointmentSeries(appointmentId: string, scope: "this_only" | "this_and_future"): Promise<void> {
+    if (scope === "this_only") {
+      await this.deleteAppointment(appointmentId);
+      return;
+    }
+
+    const appointment = await this.getAppointment(appointmentId);
+    if (!appointment) {
+      throw new Error("Appointment not found");
+    }
+
+    if (!appointment.seriesId) {
+      await this.deleteAppointment(appointmentId);
+      return;
+    }
+
+    await db
+      .delete(appointments)
+      .where(
+        and(
+          eq(appointments.seriesId, appointment.seriesId),
+          gte(appointments.date, appointment.date)
+        )
+      );
+  }
+
+  async updateAppointmentSeries(appointmentId: string, scope: "this_only" | "this_and_future", data: Partial<InsertAppointment>): Promise<Appointment[]> {
+    const appointment = await this.getAppointment(appointmentId);
+    if (!appointment) {
+      throw new Error("Appointment not found");
+    }
+
+    if (scope === "this_only") {
+      const updated = await this.updateAppointment(appointmentId, { 
+        ...data, 
+        seriesId: null,
+        frequency: "puntual"
+      });
+      return [updated];
+    } else {
+      if (!appointment.seriesId) {
+        const updated = await this.updateAppointment(appointmentId, data);
+        return [updated];
+      }
+
+      const updatedAppointments = await db
+        .update(appointments)
+        .set({ ...data, updatedAt: new Date() })
+        .where(
+          and(
+            eq(appointments.seriesId, appointment.seriesId),
+            gte(appointments.date, appointment.date)
+          )
+        )
+        .returning();
+
+      return updatedAppointments;
+    }
+  }
+
+  async changeSeriesFrequency(appointmentId: string, newFrequency: "semanal" | "quincenal"): Promise<Appointment[]> {
+    const appointment = await this.getAppointment(appointmentId);
+    if (!appointment || !appointment.seriesId) {
+      throw new Error("Appointment not found or not part of a series");
+    }
+
+    const futureAppointments = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.seriesId, appointment.seriesId),
+          gte(appointments.date, appointment.date)
+        )
+      )
+      .orderBy(asc(appointments.date));
+
+    if (futureAppointments.length === 0) {
+      return [];
+    }
+
+    const intervalDays = newFrequency === "semanal" ? 7 : 14;
+    const baseDate = new Date(appointment.date);
+    
+    const updatedAppointments: Appointment[] = [];
+    for (let i = 0; i < futureAppointments.length; i++) {
+      const newDate = new Date(baseDate);
+      newDate.setDate(baseDate.getDate() + (i * intervalDays));
+
+      const [updated] = await db
+        .update(appointments)
+        .set({ 
+          date: newDate,
+          frequency: newFrequency,
+          updatedAt: new Date() 
+        })
+        .where(eq(appointments.id, futureAppointments[i].id))
+        .returning();
+
+      updatedAppointments.push(updated);
+    }
+
+    return updatedAppointments;
   }
 }
 
