@@ -4,6 +4,7 @@ import {
   clientAvailability,
   appointments,
   therapistWorkingHours,
+  settings,
   type User,
   type UpsertUser,
   type Therapist,
@@ -16,6 +17,9 @@ import {
   type UpdateClient,
   type TherapistWorkingHours,
   type InsertTherapistWorkingHours,
+  type Setting,
+  type InsertSetting,
+  type UpdateSetting,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc } from "drizzle-orm";
@@ -62,6 +66,11 @@ export interface IStorage {
   // Therapist working hours operations
   getTherapistWorkingHours(therapistId: string): Promise<TherapistWorkingHours[]>;
   setTherapistWorkingHours(therapistId: string, hours: InsertTherapistWorkingHours[]): Promise<TherapistWorkingHours[]>;
+  
+  // Settings operations
+  getAllSettings(): Promise<Setting[]>;
+  getSetting(key: string): Promise<Setting | undefined>;
+  upsertSetting(key: string, value: any): Promise<Setting>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -366,6 +375,31 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updatedAppointments;
+  }
+
+  // Settings operations
+  async getAllSettings(): Promise<Setting[]> {
+    return await db.select().from(settings);
+  }
+
+  async getSetting(key: string): Promise<Setting | undefined> {
+    const [setting] = await db.select().from(settings).where(eq(settings.key, key));
+    return setting;
+  }
+
+  async upsertSetting(key: string, value: any): Promise<Setting> {
+    const [setting] = await db
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: {
+          value,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return setting;
   }
 }
 

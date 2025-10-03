@@ -36,11 +36,21 @@ const canManageAppointment = async (req: any, res: Response, next: NextFunction)
         }
         
         if (appointment.therapistId !== user.therapistId) {
-          return res.status(403).json({ message: "Not authorized to manage this appointment" });
+          const setting = await storage.getSetting('therapists_can_edit_others');
+          const canEditOthers = setting?.value === true;
+          
+          if (!canEditOthers) {
+            return res.status(403).json({ message: "Not authorized to manage this appointment" });
+          }
         }
       } else if (req.method === 'POST' && req.body.therapistId) {
         if (req.body.therapistId !== user.therapistId) {
-          return res.status(403).json({ message: "Not authorized to create appointments for other therapists" });
+          const setting = await storage.getSetting('therapists_can_edit_others');
+          const canEditOthers = setting?.value === true;
+          
+          if (!canEditOthers) {
+            return res.status(403).json({ message: "Not authorized to create appointments for other therapists" });
+          }
         }
       }
       
@@ -544,6 +554,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error changing series frequency:", error);
       res.status(500).json({ message: "Failed to change series frequency" });
+    }
+  });
+
+  // Settings routes
+  app.get('/api/settings', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const settings = await storage.getAllSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
+  app.put('/api/settings/:key', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { key } = req.params;
+      const { value } = req.body;
+      
+      if (value === undefined) {
+        return res.status(400).json({ message: "Value is required" });
+      }
+      
+      const setting = await storage.upsertSetting(key, value);
+      res.json(setting);
+    } catch (error) {
+      console.error("Error updating setting:", error);
+      res.status(500).json({ message: "Failed to update setting" });
     }
   });
 

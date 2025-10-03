@@ -1,5 +1,6 @@
-import { Calendar, Users, UserCircle, LayoutDashboard, Clock } from "lucide-react";
+import { Calendar, Users, UserCircle, LayoutDashboard, Clock, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -13,6 +14,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type { User } from "@shared/schema";
 
 const menuItems = [
   {
@@ -44,6 +46,11 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { data: user } = useQuery<User>({
+    queryKey: ['/api/auth/user'],
+  });
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <Sidebar>
@@ -75,6 +82,20 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === '/settings'}
+                    data-testid="link-settings"
+                  >
+                    <Link href="/settings">
+                      <Settings className="h-4 w-4" />
+                      <span>Configuración</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

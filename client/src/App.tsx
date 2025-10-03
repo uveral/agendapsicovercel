@@ -19,6 +19,7 @@ import ClientDetail from "@/pages/ClientDetail";
 import Calendar from "@/pages/Calendar";
 import Appointments from "@/pages/Appointments";
 import Availability from "@/pages/Availability";
+import Settings from "@/pages/Settings";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 import type { User } from "@shared/schema";
@@ -84,6 +85,7 @@ function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
           <Route path="/calendar" component={Calendar} />
           <Route path="/appointments" component={Appointments} />
           <Route path="/availability" component={Availability} />
+          <Route path="/settings" component={Settings} />
         </>
       )}
       <Route component={NotFound} />
