@@ -35,26 +35,11 @@ export default function Availability() {
     },
   });
 
-  const handleSave = (data: any[]) => {
-    const enabledDays = data.filter((d) => d.enabled);
-    const availabilityData = enabledDays.flatMap((day) => {
-      const dayIndex = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].indexOf(day.day);
-      return day.timeSlots
-        .filter((slot: any) => slot.selected)
-        .map((slot: any) => {
-          const [start, end] = slot.time.split('-');
-          return {
-            dayOfWeek: dayIndex + 1, // Monday = 1
-            startTime: start,
-            endTime: end,
-          };
-        });
-    });
-
-    saveMutation.mutate(availabilityData);
+  const handleSave = (data: { dayOfWeek: number; startTime: string; endTime: string }[]) => {
+    saveMutation.mutate(data);
   };
 
-  const dayNames = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const uniqueDays = Array.from(new Set(availability.map((a) => a.dayOfWeek)));
   const daysAvailable = uniqueDays.map((d) => dayNames[d]).filter(Boolean);
 
@@ -111,7 +96,11 @@ export default function Availability() {
         </Card>
       )}
 
-      <AvailabilityForm onSave={handleSave} />
+      <AvailabilityForm 
+        onSave={handleSave} 
+        existingAvailability={availability}
+        isLoading={isLoading}
+      />
     </div>
   );
 }
