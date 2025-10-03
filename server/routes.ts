@@ -20,6 +20,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/auth/user/role', isAuthenticated, async (req: any, res) => {
+    // Role switching requires explicit ALLOW_ROLE_SWITCHING=true (for testing only)
+    const allowRoleSwitching = process.env.ALLOW_ROLE_SWITCHING === 'true' || process.env.NODE_ENV === 'development';
+    
+    if (!allowRoleSwitching) {
+      return res.status(403).json({ message: "Role switching is not allowed" });
+    }
+    
+    try {
+      const userId = req.user.claims.sub;
+      const { role } = req.body;
+      
+      if (!role || (role !== 'admin' && role !== 'client')) {
+        return res.status(400).json({ message: "Invalid role. Must be 'admin' or 'client'" });
+      }
+      
+      const updatedUser = await storage.updateUser(userId, { role });
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update role" });
+    }
+  });
+
   // Therapist routes
   app.get('/api/therapists', isAuthenticated, async (req, res) => {
     try {

@@ -24,6 +24,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  updateUser(userId: string, data: { role: string }): Promise<User>;
   
   // Therapist operations
   getAllTherapists(): Promise<Therapist[]>;
@@ -80,6 +81,18 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
+  }
+
+  async updateUser(userId: string, data: { role: string }): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ role: data.role as "admin" | "client" })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!user) {
+      throw new Error("User not found");
+    }
+    return user;
   }
 
   // Therapist operations
