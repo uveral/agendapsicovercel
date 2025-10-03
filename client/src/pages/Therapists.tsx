@@ -81,8 +81,8 @@ export default function Therapists() {
     queryKey: ["/api/appointments"],
   });
 
-  // Get unique specialties
-  const specialties = Array.from(new Set(therapists.map((t) => t.specialty)));
+  // Get unique specialties (filter out empty strings)
+  const specialties = Array.from(new Set(therapists.map((t) => t.specialty))).filter(s => s && s.trim() !== "");
 
   // Calculate stats for each therapist
   const therapistsWithStats = therapists.map((therapist) => {

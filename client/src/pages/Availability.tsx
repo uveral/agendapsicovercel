@@ -17,7 +17,7 @@ export default function Availability() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: any[]) => {
-      return await apiRequest("/api/availability", "POST", data);
+      return await apiRequest("POST", "/api/availability", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/availability"] });
