@@ -7,6 +7,9 @@ import { z } from "zod";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Therapist, Appointment, User } from "@shared/schema";
+import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
 
 const canManageAppointment = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -530,6 +533,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PDF generation helper functions
+  async function getLogoPNGDataURI(): Promise<string> {
+    try {
+      const svgPath = path.join(__dirname, '../client/public/logo-centro-orienta.svg');
+      const svgBuffer = fs.readFileSync(svgPath);
+      
+      const pngBuffer = await sharp(svgBuffer)
+        .resize(200, 100)
+        .png()
+        .toBuffer();
+      
+      const base64 = pngBuffer.toString('base64');
+      return `data:image/png;base64,${base64}`;
+    } catch (error) {
+      console.error('Failed to convert logo to PNG:', error);
+      throw error;
+    }
+  }
+
   function formatDate(date: Date | string): string {
     const d = typeof date === 'string' ? new Date(date) : date;
     return d.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -542,28 +563,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return `${monthNames[parseInt(monthNum) - 1]} ${year}`;
   }
 
-  function generateTherapistMonthlyPDF(
+  async function generateTherapistMonthlyPDF(
     therapist: Therapist,
     appointments: Appointment[],
     clients: Map<string, User>,
     month: string
-  ): Buffer {
+  ): Promise<Buffer> {
     const doc = new jsPDF();
     
-    doc.setFontSize(20);
-    doc.setTextColor(183, 205, 149);
-    doc.text('Centro Orienta', 15, 20);
+    const logoDataURI = await getLogoPNGDataURI();
+    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 20);
     
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Reporte Mensual - ${therapist.name}`, 15, 35);
+    doc.setFontSize(18);
+    doc.setTextColor(95, 172, 66);
+    doc.text('Centro Orienta', 60, 20);
     
-    doc.setFontSize(12);
+    doc.setFontSize(14);
+    doc.setTextColor(95, 172, 66);
+    doc.text(`Reporte Mensual - ${therapist.name}`, 15, 38);
+    
+    doc.setFontSize(11);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Período: ${formatMonth(month)}`, 15, 45);
+    doc.text(`Período: ${formatMonth(month)}`, 15, 46);
+    
+    doc.setTextColor(0, 0, 0);
     
     autoTable(doc, {
-      startY: 55,
+      startY: 54,
       head: [['Fecha', 'Hora', 'Cliente', 'Estado']],
       body: appointments.map(apt => [
         formatDate(apt.date),
@@ -583,28 +609,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return Buffer.from(doc.output('arraybuffer'));
   }
 
-  function generateMonthlyPDF(
+  async function generateMonthlyPDF(
     appointments: Appointment[],
     therapists: Map<string, Therapist>,
     clients: Map<string, User>,
     month: string
-  ): Buffer {
+  ): Promise<Buffer> {
     const doc = new jsPDF();
     
-    doc.setFontSize(20);
-    doc.setTextColor(183, 205, 149);
-    doc.text('Centro Orienta', 15, 20);
+    const logoDataURI = await getLogoPNGDataURI();
+    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 20);
     
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Reporte Mensual - Todos los Terapeutas', 15, 35);
+    doc.setFontSize(18);
+    doc.setTextColor(95, 172, 66);
+    doc.text('Centro Orienta', 60, 20);
     
-    doc.setFontSize(12);
+    doc.setFontSize(14);
+    doc.setTextColor(95, 172, 66);
+    doc.text('Reporte Mensual - Todos los Terapeutas', 15, 38);
+    
+    doc.setFontSize(11);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Período: ${formatMonth(month)}`, 15, 45);
+    doc.text(`Período: ${formatMonth(month)}`, 15, 46);
+    
+    doc.setTextColor(0, 0, 0);
     
     autoTable(doc, {
-      startY: 55,
+      startY: 54,
       head: [['Fecha', 'Hora', 'Terapeuta', 'Cliente', 'Estado']],
       body: appointments.map(apt => [
         formatDate(apt.date),
@@ -625,28 +656,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return Buffer.from(doc.output('arraybuffer'));
   }
 
-  function generateDailyPDF(
+  async function generateDailyPDF(
     appointments: Appointment[],
     therapists: Map<string, Therapist>,
     clients: Map<string, User>,
     date: string
-  ): Buffer {
+  ): Promise<Buffer> {
     const doc = new jsPDF();
     
-    doc.setFontSize(20);
-    doc.setTextColor(183, 205, 149);
-    doc.text('Centro Orienta', 15, 20);
+    const logoDataURI = await getLogoPNGDataURI();
+    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 20);
     
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Reporte Diario', 15, 35);
+    doc.setFontSize(18);
+    doc.setTextColor(95, 172, 66);
+    doc.text('Centro Orienta', 60, 20);
     
-    doc.setFontSize(12);
+    doc.setFontSize(14);
+    doc.setTextColor(95, 172, 66);
+    doc.text('Reporte Diario', 15, 38);
+    
+    doc.setFontSize(11);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Fecha: ${formatDate(date)}`, 15, 45);
+    doc.text(`Fecha: ${formatDate(date)}`, 15, 46);
+    
+    doc.setTextColor(0, 0, 0);
     
     autoTable(doc, {
-      startY: 55,
+      startY: 54,
       head: [['Hora', 'Terapeuta', 'Cliente', 'Estado']],
       body: appointments.map(apt => [
         `${apt.startTime} - ${apt.endTime}`,
@@ -707,14 +743,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (client) clients.set(client.id, client);
       });
       
-      const pdfBuffer = generateTherapistMonthlyPDF(therapist, appointments, clients, month);
+      const pdfBuffer = await generateTherapistMonthlyPDF(therapist, appointments, clients, month);
       
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=reporte_${therapist.name}_${month}.pdf`);
       res.send(pdfBuffer);
     } catch (error) {
-      console.error("Error generating therapist PDF:", error);
-      res.status(500).json({ message: "Failed to generate PDF" });
+      console.error("PDF generation failed:", error);
+      res.status(500).json({ message: "Failed to generate PDF", error: (error as Error).message });
     }
   });
 
@@ -748,14 +784,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (client) clients.set(client.id, client);
       });
       
-      const pdfBuffer = generateMonthlyPDF(appointments, therapists, clients, month);
+      const pdfBuffer = await generateMonthlyPDF(appointments, therapists, clients, month);
       
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=reporte_mensual_${month}.pdf`);
       res.send(pdfBuffer);
     } catch (error) {
-      console.error("Error generating monthly PDF:", error);
-      res.status(500).json({ message: "Failed to generate PDF" });
+      console.error("PDF generation failed:", error);
+      res.status(500).json({ message: "Failed to generate PDF", error: (error as Error).message });
     }
   });
 
@@ -791,14 +827,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (client) clients.set(client.id, client);
       });
       
-      const pdfBuffer = generateDailyPDF(appointments, therapists, clients, date);
+      const pdfBuffer = await generateDailyPDF(appointments, therapists, clients, date);
       
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=reporte_diario_${date}.pdf`);
       res.send(pdfBuffer);
     } catch (error) {
-      console.error("Error generating daily PDF:", error);
-      res.status(500).json({ message: "Failed to generate PDF" });
+      console.error("PDF generation failed:", error);
+      res.status(500).json({ message: "Failed to generate PDF", error: (error as Error).message });
     }
   });
 
