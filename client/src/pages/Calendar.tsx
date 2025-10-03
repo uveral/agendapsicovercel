@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
-import { WeekCalendar } from "@/components/WeekCalendar";
+import { MonthCalendar } from "@/components/MonthCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import {
@@ -45,51 +45,6 @@ export default function Calendar() {
       setViewType("individual");
     }
   }, [therapistParam, selectedTherapist]);
-
-  // Generate week schedule for a therapist
-  const generateScheduleForTherapist = (therapistId: string) => {
-    const therapistAppointments = appointments.filter(
-      (apt) => apt.therapistId === therapistId && apt.status !== "cancelled"
-    );
-
-    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const today = new Date();
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay() + 1); // Start on Monday
-
-    const schedule = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + i);
-      
-      const daySlots = therapistAppointments
-        .filter((apt) => {
-          const aptDate = new Date(apt.date);
-          return aptDate.toDateString() === date.toDateString();
-        })
-        .map((apt) => {
-          const client = clients.find((c) => c.id === apt.clientId);
-          const clientName = client
-            ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente'
-            : 'Cliente';
-
-          return {
-            id: apt.id,
-            time: apt.startTime,
-            client: clientName,
-            status: apt.status as "confirmed" | "pending",
-          };
-        });
-
-      schedule.push({
-        day: dayNames[date.getDay()],
-        date: `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`,
-        slots: daySlots,
-      });
-    }
-
-    return schedule;
-  };
 
   const therapistsList = [
     { id: "all", name: "Todos los terapeutas" },
@@ -160,19 +115,23 @@ export default function Calendar() {
 
         <TabsContent value="individual" className="space-y-6 mt-6">
           {selectedTherapist !== "all" ? (
-            <WeekCalendar
+            <MonthCalendar
               therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
-              schedule={generateScheduleForTherapist(selectedTherapist)}
-              onSlotClick={(id) => setEditingAppointmentId(id)}
+              therapistId={selectedTherapist}
+              appointments={appointments}
+              clients={clients}
+              onAppointmentClick={(id) => setEditingAppointmentId(id)}
             />
           ) : (
             <div className="space-y-6">
               {therapists.map((therapist) => (
-                <WeekCalendar
+                <MonthCalendar
                   key={therapist.id}
                   therapistName={therapist.name}
-                  schedule={generateScheduleForTherapist(therapist.id)}
-                  onSlotClick={(id) => setEditingAppointmentId(id)}
+                  therapistId={therapist.id}
+                  appointments={appointments}
+                  clients={clients}
+                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
                 />
               ))}
               {therapists.length === 0 && (
