@@ -43,7 +43,55 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTherapistSchema, type InsertTherapist } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Therapist, Appointment } from "@shared/schema";
+import type { Therapist, Appointment, TherapistWorkingHours } from "@shared/schema";
+
+const calculateWeeklyAvailability = (
+  appointments: Appointment[],
+  schedule: TherapistWorkingHours[]
+): number => {
+  // Calculate available hours per week
+  let availableHours = 0;
+  for (const block of schedule) {
+    const startHour = parseInt(block.startTime.split(':')[0]);
+    const startMin = parseInt(block.startTime.split(':')[1]);
+    const endHour = parseInt(block.endTime.split(':')[0]);
+    const endMin = parseInt(block.endTime.split(':')[1]);
+    
+    const durationHours = (endHour * 60 + endMin - startHour * 60 - startMin) / 60;
+    availableHours += durationHours;
+  }
+  
+  if (availableHours === 0) return 0;
+  
+  // Get current week bounds (Monday to Sunday)
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ...
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() + mondayOffset);
+  weekStart.setHours(0, 0, 0, 0);
+  
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  
+  // Calculate occupied hours this week
+  const thisWeekAppointments = appointments.filter(apt => {
+    const aptDate = new Date(apt.date);
+    return aptDate >= weekStart && aptDate <= weekEnd && apt.status !== "cancelled";
+  });
+  
+  let occupiedHours = 0;
+  for (const apt of thisWeekAppointments) {
+    occupiedHours += (apt.durationMinutes || 60) / 60;
+  }
+  
+  // Calculate percentage
+  const occupancyRate = (occupiedHours / availableHours) * 100;
+  const availability = Math.max(0, Math.min(100, Math.round(100 - occupancyRate)));
+  
+  return availability;
+};
 
 export default function Therapists() {
   const [, setLocation] = useLocation();
@@ -115,6 +163,10 @@ export default function Therapists() {
     queryKey: ["/api/appointments"],
   });
 
+  const { data: allWorkingHours = [] } = useQuery<TherapistWorkingHours[]>({
+    queryKey: ["/api/therapist-working-hours"],
+  });
+
   // Get unique specialties (filter out empty strings)
   const specialties = Array.from(new Set(therapists.map((t) => t.specialty))).filter(s => s && s.trim() !== "");
 
@@ -129,8 +181,16 @@ export default function Therapists() {
       (apt) => new Date(apt.date) >= today
     ).length;
 
-    // Calculate availability (simplified: 100 - percentage of busy slots)
-    const availability = Math.max(0, 100 - (therapistAppointments.length * 5));
+    // Get therapist's working hours schedule
+    const therapistSchedule = allWorkingHours.filter(
+      (wh) => wh.therapistId === therapist.id
+    );
+
+    // Calculate weekly availability based on working hours and appointments
+    const availability = calculateWeeklyAvailability(
+      therapistAppointments,
+      therapistSchedule
+    );
 
     return {
       ...therapist,
