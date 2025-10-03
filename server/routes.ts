@@ -539,7 +539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const svgBuffer = fs.readFileSync(svgPath);
       
       const pngBuffer = await sharp(svgBuffer)
-        .resize(200, 100)
+        .resize(200, null, { fit: 'inside' })
         .png()
         .toBuffer();
       
@@ -572,11 +572,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const doc = new jsPDF();
     
     const logoDataURI = await getLogoPNGDataURI();
-    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 20);
+    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 9);
     
     doc.setFontSize(18);
     doc.setTextColor(95, 172, 66);
-    doc.text('Centro Orienta', 60, 20);
+    doc.text('Centro Orienta', 60, 16);
     
     doc.setFontSize(14);
     doc.setTextColor(95, 172, 66);
@@ -618,11 +618,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const doc = new jsPDF();
     
     const logoDataURI = await getLogoPNGDataURI();
-    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 20);
+    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 9);
     
     doc.setFontSize(18);
     doc.setTextColor(95, 172, 66);
-    doc.text('Centro Orienta', 60, 20);
+    doc.text('Centro Orienta', 60, 16);
     
     doc.setFontSize(14);
     doc.setTextColor(95, 172, 66);
@@ -665,11 +665,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const doc = new jsPDF();
     
     const logoDataURI = await getLogoPNGDataURI();
-    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 20);
+    doc.addImage(logoDataURI, 'PNG', 15, 10, 40, 9);
     
     doc.setFontSize(18);
     doc.setTextColor(95, 172, 66);
-    doc.text('Centro Orienta', 60, 20);
+    doc.text('Centro Orienta', 60, 16);
     
     doc.setFontSize(14);
     doc.setTextColor(95, 172, 66);
