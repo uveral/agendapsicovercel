@@ -1,24 +1,37 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Mail, Clock } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { ArrowLeft, Download, Mail, Clock, Edit } from "lucide-react";
 import { AppointmentCard } from "@/components/AppointmentCard";
+import { TherapistScheduleDialog } from "@/components/TherapistScheduleDialog";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Therapist, Appointment, User, TherapistWorkingHours } from "@shared/schema";
 
 export default function TherapistDetail() {
   const { id } = useParams();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth() as { user: User | undefined };
   
   const today = new Date();
   const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  
+  const [editInfoOpen, setEditInfoOpen] = useState(false);
+  const [editScheduleOpen, setEditScheduleOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    email: "",
+    specialty: "",
+    color: ""
+  });
 
   const { data: therapist, isLoading: loadingTherapist } = useQuery<Therapist>({
     queryKey: ['/api/therapists', id],
@@ -35,6 +48,43 @@ export default function TherapistDetail() {
   const { data: clients = [] } = useQuery<User[]>({
     queryKey: ['/api/clients'],
   });
+
+  const updateTherapistMutation = useMutation({
+    mutationFn: async (data: { email?: string; specialty?: string; color?: string }) => {
+      return await apiRequest("PATCH", `/api/therapists/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/therapists', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/therapists'] });
+      toast({
+        title: "Información actualizada",
+        description: "Los datos del terapeuta han sido actualizados exitosamente",
+      });
+      setEditInfoOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar la información",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditInfo = () => {
+    if (therapist) {
+      setEditForm({
+        email: therapist.email || "",
+        specialty: therapist.specialty || "",
+        color: therapist.color || "#3b82f6"
+      });
+      setEditInfoOpen(true);
+    }
+  };
+
+  const handleSaveInfo = () => {
+    updateTherapistMutation.mutate(editForm);
+  };
 
   const handleDownloadPDF = async () => {
     if (!therapist) return;
@@ -130,8 +180,18 @@ export default function TherapistDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card data-testid="card-therapist-info">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
             <CardTitle>Información del Terapeuta</CardTitle>
+            {user?.role === 'admin' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleEditInfo}
+                data-testid="button-edit-therapist-info"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3">
@@ -158,8 +218,18 @@ export default function TherapistDetail() {
         </Card>
 
         <Card data-testid="card-working-hours">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
             <CardTitle>Horario Laboral</CardTitle>
+            {user?.role === 'admin' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setEditScheduleOpen(true)}
+                data-testid="button-edit-therapist-schedule"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {schedule.length === 0 ? (
@@ -289,6 +359,85 @@ export default function TherapistDetail() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={editInfoOpen} onOpenChange={setEditInfoOpen}>
+        <DialogContent data-testid="dialog-edit-therapist-info">
+          <DialogHeader>
+            <DialogTitle>Editar Información del Terapeuta</DialogTitle>
+            <DialogDescription>
+              Actualiza los datos básicos del terapeuta
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                placeholder="email@ejemplo.com"
+                data-testid="input-edit-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-specialty">Especialidad</Label>
+              <Input
+                id="edit-specialty"
+                value={editForm.specialty}
+                onChange={(e) => setEditForm({ ...editForm, specialty: e.target.value })}
+                placeholder="Especialidad"
+                data-testid="input-edit-specialty"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-color">Color de Identificación</Label>
+              <div className="flex gap-3 items-center">
+                <Input
+                  id="edit-color"
+                  type="color"
+                  value={editForm.color}
+                  onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                  className="w-20 h-10"
+                  data-testid="input-edit-color"
+                />
+                <Input
+                  value={editForm.color}
+                  onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                  placeholder="#3b82f6"
+                  data-testid="input-edit-color-text"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditInfoOpen(false)}
+              disabled={updateTherapistMutation.isPending}
+              data-testid="button-cancel-edit-info"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSaveInfo}
+              disabled={updateTherapistMutation.isPending}
+              data-testid="button-save-therapist-info"
+            >
+              {updateTherapistMutation.isPending ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {therapist && (
+        <TherapistScheduleDialog
+          therapistId={therapist.id}
+          therapistName={therapist.name}
+          open={editScheduleOpen}
+          onOpenChange={setEditScheduleOpen}
+        />
+      )}
     </div>
   );
 }
