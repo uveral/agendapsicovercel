@@ -289,7 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/appointments', isAuthenticated, isAdmin, async (req, res) => {
+  app.post('/api/appointments', isAuthenticated, async (req, res) => {
     try {
       const data = insertAppointmentSchema.parse(req.body);
       const appointment = await storage.createAppointment(data);
@@ -313,7 +313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/appointments/:id', isAuthenticated, isAdmin, async (req, res) => {
+  app.delete('/api/appointments/:id', isAuthenticated, async (req, res) => {
     try {
       await storage.deleteAppointment(req.params.id);
       res.status(204).send();

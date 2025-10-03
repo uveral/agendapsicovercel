@@ -55,6 +55,7 @@ export const therapists = pgTable("therapists", {
   specialty: varchar("specialty").notNull(),
   email: varchar("email"),
   phone: varchar("phone"),
+  color: varchar("color").notNull().default("#3b82f6"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -118,6 +119,9 @@ export const appointments = pgTable("appointments", {
   endTime: varchar("end_time").notNull(), // Format: "HH:mm"
   status: varchar("status", { enum: ["pending", "confirmed", "cancelled"] }).notNull().default("pending"),
   notes: text("notes"),
+  seriesId: varchar("series_id"),
+  frequency: varchar("frequency", { enum: ["puntual", "semanal", "quincenal"] }).notNull().default("puntual"),
+  durationMinutes: integer("duration_minutes").notNull().default(60),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
