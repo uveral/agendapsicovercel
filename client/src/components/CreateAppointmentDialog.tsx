@@ -15,14 +15,18 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User, ClientAvailability, Therapist, TherapistWorkingHours, Appointment } from "@shared/schema";
 import { Loader2, Calendar } from "lucide-react";
+import { ClientCombobox } from "@/components/ClientCombobox";
 
 interface CreateAppointmentDialogProps {
   open: boolean;
-  clientId: string;
+  clientId?: string;
+  initialTherapistId?: string;
+  initialDate?: string;
   onClose: () => void;
 }
 
 const formSchema = z.object({
+  clientId: z.string().min(1, "Selecciona un cliente"),
   therapistId: z.string().min(1, "Selecciona un terapeuta"),
   date: z.string().min(1, "Selecciona una fecha"),
   startTime: z.string().min(1, "Selecciona hora de inicio"),
@@ -67,15 +71,16 @@ const calculateEndTime = (startTime: string, durationMinutes: number): string =>
   return `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
 };
 
-export default function CreateAppointmentDialog({ open, clientId, onClose }: CreateAppointmentDialogProps) {
+export default function CreateAppointmentDialog({ open, clientId, initialTherapistId, initialDate, onClose }: CreateAppointmentDialogProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      therapistId: "",
-      date: "",
+      clientId: clientId || "",
+      therapistId: initialTherapistId || "",
+      date: initialDate || "",
       startTime: "",
       durationMinutes: 60,
       frequency: "semanal",
@@ -87,23 +92,45 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
 
   const frequency = form.watch("frequency");
   const sessionPeriod = form.watch("sessionPeriod");
+  const selectedClientId = form.watch("clientId");
   const selectedTherapistId = form.watch("therapistId");
   const startTime = form.watch("startTime");
   const durationMinutes = form.watch("durationMinutes");
 
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        clientId: clientId || "",
+        therapistId: initialTherapistId || "",
+        date: initialDate || "",
+        startTime: "",
+        durationMinutes: 60,
+        frequency: "semanal",
+        sessionPeriod: "6 meses",
+        status: "confirmed",
+        notes: "",
+      });
+    }
+  }, [open, clientId, initialTherapistId, initialDate, form]);
+
   const { data: client } = useQuery<User>({
-    queryKey: [`/api/clients/${clientId}`],
-    enabled: open && !!clientId,
+    queryKey: [`/api/clients/${selectedClientId || clientId}`],
+    enabled: open && !!(selectedClientId || clientId),
   });
 
   const { data: availability = [] } = useQuery<ClientAvailability[]>({
-    queryKey: [`/api/availability/${clientId}`],
-    enabled: open && !!clientId,
+    queryKey: [`/api/availability/${selectedClientId || clientId}`],
+    enabled: open && !!(selectedClientId || clientId),
   });
 
   const { data: therapists = [] } = useQuery<Therapist[]>({
     queryKey: ['/api/therapists'],
     enabled: open,
+  });
+
+  const { data: allClients = [] } = useQuery<User[]>({
+    queryKey: ['/api/clients'],
+    enabled: open && !clientId,
   });
 
   const { data: therapistSchedule = [] } = useQuery<TherapistWorkingHours[]>({
@@ -233,10 +260,11 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
       const endTime = calculateEndTime(data.startTime, data.durationMinutes);
+      const finalClientId = data.clientId || clientId;
       
       if (data.frequency === "puntual") {
         return await apiRequest("POST", "/api/appointments", {
-          clientId,
+          clientId: finalClientId,
           therapistId: data.therapistId,
           date: data.date,
           startTime: data.startTime,
@@ -261,7 +289,7 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
           }
 
           appointments.push({
-            clientId,
+            clientId: finalClientId,
             therapistId: data.therapistId,
             date: appointmentDate.toISOString().split('T')[0],
             startTime: data.startTime,
@@ -320,6 +348,28 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {!clientId && (
+              <FormField
+                control={form.control}
+                name="clientId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cliente</FormLabel>
+                    <FormControl>
+                      <ClientCombobox
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        clients={allClients}
+                        placeholder="Buscar cliente..."
+                        testId="combobox-appointment-client"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="therapistId"

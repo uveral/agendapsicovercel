@@ -5,6 +5,7 @@ import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
 import { AvailabilitySummary } from "@/components/AvailabilitySummary";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
+import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Select,
@@ -54,6 +55,11 @@ export default function Calendar() {
   );
   const [calendarView, setCalendarView] = useState<"monthly" | "weekly">("monthly");
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDialogContext, setCreateDialogContext] = useState<{
+    therapistId?: string;
+    date?: string;
+  }>({});
 
   // Update selected therapist when user or therapists data loads
   useEffect(() => {
@@ -85,6 +91,11 @@ export default function Calendar() {
       setViewType("general");
       setLocation("/calendar");
     }
+  };
+
+  const handleDayClick = (therapistId: string, date: string) => {
+    setCreateDialogContext({ therapistId, date });
+    setCreateDialogOpen(true);
   };
 
   if (isLoadingTherapists) {
@@ -187,6 +198,7 @@ export default function Calendar() {
                   appointments={appointments}
                   clients={clients}
                   onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                  onDayClick={handleDayClick}
                 />
               ) : (
                 <WeekCalendar
@@ -214,6 +226,7 @@ export default function Calendar() {
                     appointments={appointments}
                     clients={clients}
                     onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                    onDayClick={handleDayClick}
                   />
                   <AvailabilitySummary
                     therapistId={therapist.id}
@@ -235,6 +248,16 @@ export default function Calendar() {
       <AppointmentEditDialog
         appointmentId={editingAppointmentId}
         onClose={() => setEditingAppointmentId(null)}
+      />
+
+      <CreateAppointmentDialog
+        open={createDialogOpen}
+        initialTherapistId={createDialogContext.therapistId}
+        initialDate={createDialogContext.date}
+        onClose={() => {
+          setCreateDialogOpen(false);
+          setCreateDialogContext({});
+        }}
       />
     </div>
   );

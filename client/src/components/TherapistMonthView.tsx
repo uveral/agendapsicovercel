@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
@@ -10,6 +11,7 @@ interface TherapistMonthViewProps {
   appointments: Appointment[];
   clients: User[];
   onAppointmentClick?: (appointmentId: string) => void;
+  onDayClick?: (therapistId: string, date: string) => void;
 }
 
 interface CalendarDay {
@@ -49,7 +51,8 @@ export function TherapistMonthView({
   therapistId, 
   appointments, 
   clients,
-  onAppointmentClick 
+  onAppointmentClick,
+  onDayClick
 }: TherapistMonthViewProps) {
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -189,8 +192,15 @@ export function TherapistMonthView({
                       !calendarDay.isCurrentMonth ? 'bg-muted/20' : 'bg-background'
                     } ${
                       isTodayDate ? 'bg-primary/5' : ''
+                    } ${
+                      calendarDay.isCurrentMonth && onDayClick ? 'cursor-pointer hover:bg-muted/50' : ''
                     }`}
                     data-testid={`day-${dayNumber}`}
+                    onClick={() => {
+                      if (calendarDay.isCurrentMonth && onDayClick) {
+                        onDayClick(therapistId, format(calendarDay.date, 'yyyy-MM-dd'));
+                      }
+                    }}
                   >
                     <div className="flex justify-end mb-2">
                       <span className={`text-2xl font-bold ${
@@ -209,7 +219,10 @@ export function TherapistMonthView({
                         return (
                           <button
                             key={apt.id}
-                            onClick={() => onAppointmentClick?.(apt.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAppointmentClick?.(apt.id);
+                            }}
                             className={`w-full text-left text-xs px-1.5 py-0.5 rounded hover-elevate transition-colors ${
                               isSpecial ? 'text-destructive' : 'text-foreground'
                             }`}
