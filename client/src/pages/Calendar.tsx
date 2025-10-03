@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { MonthCalendar } from "@/components/MonthCalendar";
+import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
@@ -167,7 +168,7 @@ export default function Calendar() {
 
           {selectedTherapist !== "all" ? (
             calendarView === "monthly" ? (
-              <MonthCalendar
+              <TherapistMonthView
                 therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
                 therapistId={selectedTherapist}
                 appointments={appointments}

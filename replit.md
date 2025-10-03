@@ -8,6 +8,32 @@ This project is a comprehensive scheduling management system designed for a psyc
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**October 3, 2025 (Session 3)** - Therapist Calendar Wall-Style View
+
+**New Feature: Calendario Estilo Pared para Terapeutas**
+- Implementado nuevo componente `TherapistMonthView` que replica el calendario físico tradicional de pared
+- **Layout de 5 columnas**: Solo días laborables (Lunes-Viernes), sin fines de semana
+- **Celdas grandes**: 180px mínimo de altura para mostrar múltiples citas sin overflow
+- **Formato limpio**: "16:00 - 17:00 → Nombre Cliente" con icono de flecha visual
+- **Encabezado destacado**: Mes/año y nombre del terapeuta en mayúsculas, estilo profesional
+- **Números de día grandes**: Posicionados en esquina superior derecha de cada celda
+- **Scroll interno**: Cada celda permite scroll independiente si hay muchas citas (max 140px visible)
+- **Colores diferenciados**: Citas con notas conteniendo "viaje"/"importante" se muestran en color rojo
+- **Integración completa**: Se usa automáticamente en Vista Individual → Vista Mensual del calendario
+
+**Technical Details**:
+- Filtrado inteligente de días: Solo muestra días laborables (L-V) del mes
+- Días fuera del mes actual: Renderizados con opacidad reducida para contexto visual
+- Interactividad: Hover elevation en citas, click para abrir diálogo de edición
+- Responsive: Mantiene estructura de 5 columnas en diferentes tamaños de pantalla
+- Navegación: Botones para mes anterior/siguiente + botón "Hoy" para regresar a mes actual
+
+**Previous Sessions**:
+- Session 2: 8 major UX enhancements including day-of-month in suggestions, duration constraints (60/90/120min), session period selector, monthly/weekly calendar toggle, therapist-specific hour ranges, weekly availability calculation, role-based dashboard visibility, traditional wall calendar redesign
+- Session 1: PDF logo fix, TherapistDetail editing, settings page with configurable permissions, OccupancyGrid improvements, user-first-name-visible system, enhanced appointments page with filters
+
 ## System Architecture
 
 ### Frontend Architecture

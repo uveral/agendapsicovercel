@@ -195,50 +195,51 @@ export function WeekCalendar({
               })}
 
               {/* Time rows */}
-              {hours.map((hour) => (
-                <>
-                  <div 
-                    key={`hour-${hour}`} 
-                    className="text-xs text-muted-foreground p-2 flex items-center sticky left-0 bg-card z-10"
-                  >
-                    {hour}:00
+              {hours.map((hour) => {
+                return (
+                  <div key={`row-${hour}`} className="contents">
+                    <div 
+                      className="text-xs text-muted-foreground p-2 flex items-center sticky left-0 bg-card z-10"
+                    >
+                      {hour}:00
+                    </div>
+                    {weekDates.map((date, dayIndex) => {
+                      const appointment = getAppointment(date, hour);
+                      const hasAppointment = !!appointment;
+                      
+                      return (
+                        <button
+                          key={`${hour}-${dayIndex}`}
+                          className={`p-2 border border-border rounded-sm text-xs min-h-[80px] transition-colors ${
+                            hasAppointment
+                              ? appointment.status === "confirmed"
+                                ? "bg-chart-1/10 border-chart-1/30 hover-elevate cursor-pointer"
+                                : "bg-chart-3/10 border-chart-3/30 hover-elevate cursor-pointer"
+                              : "bg-card hover-elevate"
+                          }`}
+                          onClick={() => {
+                            if (appointment && onAppointmentClick) {
+                              onAppointmentClick(appointment.id);
+                            }
+                          }}
+                          data-testid={`slot-${dayNames[dayIndex]}-${hour}`}
+                        >
+                          {hasAppointment && (
+                            <div className="space-y-1 flex flex-col items-start">
+                              <div className="font-medium text-sm truncate w-full">
+                                {getClientName(appointment)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {appointment.startTime} - {appointment.endTime}
+                              </div>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {weekDates.map((date, dayIndex) => {
-                    const appointment = getAppointment(date, hour);
-                    const hasAppointment = !!appointment;
-                    
-                    return (
-                      <button
-                        key={`${hour}-${dayIndex}`}
-                        className={`p-2 border border-border rounded-sm text-xs min-h-[80px] transition-colors ${
-                          hasAppointment
-                            ? appointment.status === "confirmed"
-                              ? "bg-chart-1/10 border-chart-1/30 hover-elevate cursor-pointer"
-                              : "bg-chart-3/10 border-chart-3/30 hover-elevate cursor-pointer"
-                            : "bg-card hover-elevate"
-                        }`}
-                        onClick={() => {
-                          if (appointment && onAppointmentClick) {
-                            onAppointmentClick(appointment.id);
-                          }
-                        }}
-                        data-testid={`slot-${dayNames[dayIndex]}-${hour}`}
-                      >
-                        {hasAppointment && (
-                          <div className="space-y-1 flex flex-col items-start">
-                            <div className="font-medium text-sm truncate w-full">
-                              {getClientName(appointment)}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              {appointment.startTime} - {appointment.endTime}
-                            </div>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
