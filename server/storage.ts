@@ -37,6 +37,7 @@ export interface IStorage {
   getClientAvailability(userId: string): Promise<ClientAvailability[]>;
   createClientAvailability(availability: InsertClientAvailability): Promise<ClientAvailability>;
   deleteClientAvailability(userId: string): Promise<void>;
+  replaceClientAvailability(clientId: string, availabilities: InsertClientAvailability[]): Promise<ClientAvailability[]>;
   
   // Appointment operations
   getAllAppointments(): Promise<Appointment[]>;
@@ -139,6 +140,17 @@ export class DatabaseStorage implements IStorage {
 
   async deleteClientAvailability(userId: string): Promise<void> {
     await db.delete(clientAvailability).where(eq(clientAvailability.userId, userId));
+  }
+
+  async replaceClientAvailability(clientId: string, availabilities: InsertClientAvailability[]): Promise<ClientAvailability[]> {
+    await db.delete(clientAvailability).where(eq(clientAvailability.userId, clientId));
+    
+    if (availabilities.length > 0) {
+      const values = availabilities.map(a => ({ ...a, userId: clientId }));
+      await db.insert(clientAvailability).values(values);
+    }
+    
+    return await db.select().from(clientAvailability).where(eq(clientAvailability.userId, clientId));
   }
 
   // Appointment operations

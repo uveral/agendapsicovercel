@@ -287,6 +287,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/availability/:clientId', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      const clientId = req.params.clientId;
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      if (user.role !== 'admin' && user.id !== clientId) {
+        return res.status(403).json({ message: "Not authorized to update this client's availability" });
+      }
+      
+      const availabilityData = Array.isArray(req.body) ? req.body : [req.body];
+      const validatedData = [];
+      
+      for (const data of availabilityData) {
+        const validated = insertClientAvailabilitySchema.parse({
+          dayOfWeek: data.dayOfWeek,
+          startTime: data.startTime,
+          endTime: data.endTime,
+        });
+        validatedData.push(validated);
+      }
+      
+      const availability = await storage.replaceClientAvailability(clientId, validatedData);
+      res.json(availability);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error updating availability:", error);
+      res.status(500).json({ message: "Failed to update availability" });
+    }
+  });
+
   // Appointment routes
   app.get('/api/appointments', isAuthenticated, async (req: any, res) => {
     try {

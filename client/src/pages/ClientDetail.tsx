@@ -1,17 +1,22 @@
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, User, Mail, Phone, Calendar, Clock } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Calendar, Clock, Edit, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { User as UserType, ClientAvailability, Appointment } from "@shared/schema";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import ClientAvailabilityMatrix from "@/components/ClientAvailabilityMatrix";
+import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 
 export default function ClientDetail() {
   const params = useParams();
   const [, setLocation] = useLocation();
   const clientId = params.id;
+  const [showEditAvailability, setShowEditAvailability] = useState(false);
+  const [showCreateAppointment, setShowCreateAppointment] = useState(false);
 
   const { data: client, isLoading: clientLoading, error: clientError } = useQuery<UserType>({
     queryKey: [`/api/clients/${clientId}`],
@@ -131,12 +136,33 @@ export default function ClientDetail() {
         </Card>
 
         <Card data-testid="card-availability">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Disponibilidad
-            </CardTitle>
-            <CardDescription>Horarios disponibles del cliente</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2 space-y-0 pb-2">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Disponibilidad
+              </CardTitle>
+              <CardDescription>Horarios disponibles del cliente</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEditAvailability(true)}
+                data-testid="button-edit-availability"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Editar
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowCreateAppointment(true)}
+                data-testid="button-create-appointment"
+              >
+                <CalendarPlus className="h-4 w-4 mr-2" />
+                Dar Cita
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {availabilityLoading ? (
@@ -253,6 +279,18 @@ export default function ClientDetail() {
           </CardContent>
         </Card>
       </div>
+
+      <ClientAvailabilityMatrix
+        open={showEditAvailability}
+        clientId={clientId || ""}
+        onClose={() => setShowEditAvailability(false)}
+      />
+
+      <CreateAppointmentDialog
+        open={showCreateAppointment}
+        clientId={clientId || ""}
+        onClose={() => setShowCreateAppointment(false)}
+      />
     </div>
   );
 }
