@@ -20,6 +20,7 @@ import {
   type Setting,
   type InsertSetting,
   type UpdateSetting,
+  type SwapSuggestion,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc } from "drizzle-orm";
@@ -55,6 +56,7 @@ export interface IStorage {
   deleteAppointmentSeries(appointmentId: string, scope: "this_only" | "this_and_future"): Promise<void>;
   updateAppointmentSeries(appointmentId: string, scope: "this_only" | "this_and_future", data: Partial<InsertAppointment>): Promise<Appointment[]>;
   changeSeriesFrequency(appointmentId: string, newFrequency: "semanal" | "quincenal"): Promise<Appointment[]>;
+  detectConflictAndSuggestSwap(therapistId: string, date: string, startTime: string, endTime: string, clientId: string): Promise<SwapSuggestion | null>;
   
   // Client operations
   getAllClients(): Promise<User[]>;
@@ -375,6 +377,166 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updatedAppointments;
+  }
+
+  async detectConflictAndSuggestSwap(
+    therapistId: string,
+    date: string,
+    startTime: string,
+    endTime: string,
+    clientId: string
+  ): Promise<SwapSuggestion | null> {
+    const appointmentDate = new Date(date);
+    appointmentDate.setHours(0, 0, 0, 0);
+    
+    const nextDay = new Date(appointmentDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    
+    const conflictingAppointments = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.therapistId, therapistId),
+          gte(appointments.date, appointmentDate),
+          lte(appointments.date, nextDay),
+          eq(appointments.status, "confirmed")
+        )
+      );
+    
+    const conflictingAppointment = conflictingAppointments.find(apt => {
+      if (apt.startTime >= endTime || apt.endTime <= startTime) {
+        return false;
+      }
+      return true;
+    });
+    
+    if (!conflictingAppointment) {
+      return null;
+    }
+    
+    const conflictingClient = await this.getClient(conflictingAppointment.clientId);
+    if (!conflictingClient) {
+      return null;
+    }
+    
+    const conflictingClientAvailability = await this.getClientAvailability(conflictingAppointment.clientId);
+    
+    if (conflictingClientAvailability.length === 0) {
+      return null;
+    }
+    
+    const therapistWorkingHours = await this.getTherapistWorkingHours(therapistId);
+    
+    const duration = conflictingAppointment.durationMinutes;
+    const searchStartDate = new Date();
+    searchStartDate.setHours(0, 0, 0, 0);
+    const searchEndDate = new Date(searchStartDate);
+    searchEndDate.setDate(searchEndDate.getDate() + 14);
+    
+    const existingAppointments = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.therapistId, therapistId),
+          gte(appointments.date, searchStartDate),
+          lte(appointments.date, searchEndDate),
+          eq(appointments.status, "confirmed")
+        )
+      );
+    
+    for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+      const checkDate = new Date(searchStartDate);
+      checkDate.setDate(checkDate.getDate() + dayOffset);
+      const dayOfWeek = checkDate.getDay();
+      
+      const clientAvailableSlots = conflictingClientAvailability.filter(
+        av => av.dayOfWeek === dayOfWeek
+      );
+      
+      if (clientAvailableSlots.length === 0) {
+        continue;
+      }
+      
+      const therapistWorkingDay = therapistWorkingHours.filter(
+        wh => wh.dayOfWeek === dayOfWeek
+      );
+      
+      if (therapistWorkingDay.length === 0) {
+        continue;
+      }
+      
+      for (const clientSlot of clientAvailableSlots) {
+        for (const workingHour of therapistWorkingDay) {
+          const slotStart = clientSlot.startTime > workingHour.startTime 
+            ? clientSlot.startTime 
+            : workingHour.startTime;
+          
+          const slotEnd = clientSlot.endTime < workingHour.endTime 
+            ? clientSlot.endTime 
+            : workingHour.endTime;
+          
+          if (slotStart >= slotEnd) {
+            continue;
+          }
+          
+          const slotStartMinutes = parseInt(slotStart.split(':')[0]) * 60 + parseInt(slotStart.split(':')[1]);
+          const slotEndMinutes = parseInt(slotEnd.split(':')[0]) * 60 + parseInt(slotEnd.split(':')[1]);
+          
+          if (slotEndMinutes - slotStartMinutes < duration) {
+            continue;
+          }
+          
+          const appointmentEndMinutes = slotStartMinutes + duration;
+          const appointmentEndHour = Math.floor(appointmentEndMinutes / 60);
+          const appointmentEndMin = appointmentEndMinutes % 60;
+          const proposedEndTime = `${appointmentEndHour.toString().padStart(2, '0')}:${appointmentEndMin.toString().padStart(2, '0')}`;
+          
+          const nextDayCheck = new Date(checkDate);
+          nextDayCheck.setDate(nextDayCheck.getDate() + 1);
+          
+          const dayAppointments = existingAppointments.filter(apt => {
+            const aptDate = new Date(apt.date);
+            aptDate.setHours(0, 0, 0, 0);
+            return aptDate.getTime() === checkDate.getTime();
+          });
+          
+          const hasConflict = dayAppointments.some(apt => {
+            if (apt.id === conflictingAppointment.id) {
+              return false;
+            }
+            return !(slotStart >= apt.endTime || proposedEndTime <= apt.startTime);
+          });
+          
+          if (hasConflict) {
+            continue;
+          }
+          
+          const suggestion: SwapSuggestion = {
+            conflictingAppointmentId: conflictingAppointment.id,
+            conflictingClientId: conflictingClient.id,
+            conflictingClientName: `${conflictingClient.firstName} ${conflictingClient.lastName}`,
+            conflictingClientPhone: conflictingClient.phone || undefined,
+            currentSlot: {
+              date: conflictingAppointment.date.toISOString().split('T')[0],
+              startTime: conflictingAppointment.startTime,
+              endTime: conflictingAppointment.endTime,
+            },
+            suggestedSlot: {
+              date: checkDate.toISOString().split('T')[0],
+              startTime: slotStart,
+              endTime: proposedEndTime,
+            },
+            rationale: `Cliente ${conflictingClient.firstName} ${conflictingClient.lastName} puede ser movido al ${checkDate.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} de ${slotStart} a ${proposedEndTime}, horario compatible con su disponibilidad.`,
+          };
+          
+          return suggestion;
+        }
+      }
+    }
+    
+    return null;
   }
 
   // Settings operations

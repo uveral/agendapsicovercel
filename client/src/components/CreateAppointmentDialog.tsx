@@ -5,16 +5,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User, ClientAvailability, Therapist, TherapistWorkingHours, Appointment } from "@shared/schema";
-import { Loader2, Calendar } from "lucide-react";
+import { Loader2, Calendar, Star } from "lucide-react";
 import { ClientCombobox } from "@/components/ClientCombobox";
 
 interface CreateAppointmentDialogProps {
@@ -45,6 +47,8 @@ interface Suggestion {
   startTime: string;
   endTime: string;
   date: string;
+  score: number;
+  reasons: string[];
 }
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -74,6 +78,7 @@ const calculateEndTime = (startTime: string, durationMinutes: number): string =>
 export default function CreateAppointmentDialog({ open, clientId, initialTherapistId, initialDate, onClose }: CreateAppointmentDialogProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -110,6 +115,7 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
         status: "confirmed",
         notes: "",
       });
+      setSelectedSuggestion(null);
     }
   }, [open, clientId, initialTherapistId, initialDate, form]);
 
@@ -141,6 +147,11 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
   const { data: therapistAppointments = [] } = useQuery<Appointment[]>({
     queryKey: [`/api/therapists/${selectedTherapistId}/appointments`],
     enabled: open && !!selectedTherapistId,
+  });
+
+  const { data: clientAppointments = [] } = useQuery<Appointment[]>({
+    queryKey: [`/api/clients/${selectedClientId || clientId}/appointments`],
+    enabled: open && !!(selectedClientId || clientId),
   });
 
   const timeRangesOverlap = (
@@ -215,12 +226,71 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
               });
 
               if (!hasConflict) {
+                let score = 0;
+                const reasons: string[] = [];
+
+                const appointmentsOnDay = therapistAppointments.filter(apt => {
+                  const aptDate = new Date(apt.date);
+                  aptDate.setHours(0, 0, 0, 0);
+                  return aptDate.getTime() === checkDate.getTime();
+                });
+
+                let groupingScore = 0;
+                for (const apt of appointmentsOnDay) {
+                  const aptStartHour = parseTime(apt.startTime);
+                  const aptEndHour = parseTime(apt.endTime);
+                  const hourDiff = Math.min(
+                    Math.abs(hour - aptEndHour),
+                    Math.abs(aptStartHour - (hour + 1))
+                  );
+
+                  if (hourDiff === 0) {
+                    groupingScore = 30;
+                    reasons.push(`Agrupa con cita de ${apt.startTime}`);
+                    break;
+                  } else if (hourDiff === 1) {
+                    groupingScore = Math.max(groupingScore, 20);
+                    if (groupingScore === 20) {
+                      reasons.push(`Cerca de cita de ${apt.startTime}`);
+                    }
+                  }
+                }
+                score += groupingScore;
+
+                const biweeklyPatternAppointments = clientAppointments.filter(apt => {
+                  const aptDate = new Date(apt.date);
+                  if (apt.therapistId !== selectedTherapistId) return false;
+                  if (aptDate.getDay() !== dayOfWeek) return false;
+                  if (apt.startTime !== slotStart) return false;
+                  
+                  const daysDiff = Math.floor((checkDate.getTime() - aptDate.getTime()) / (1000 * 60 * 60 * 24));
+                  return daysDiff > 0 && daysDiff % 14 === 0;
+                });
+
+                if (biweeklyPatternAppointments.length > 0) {
+                  score += 25;
+                  reasons.push(`Patrón quincenal detectado`);
+                }
+
+                const proximityScore = Math.max(0, 15 - dayOffset);
+                score += proximityScore;
+                if (dayOffset <= 3) {
+                  reasons.push(`Disponible pronto`);
+                }
+
+                if (hour >= 10 && hour < 18) {
+                  score += 10;
+                  reasons.push(`Horario central`);
+                }
+
                 suggested.push({
                   dayOfWeek,
                   dayName: DAY_NAMES[dayOfWeek],
                   startTime: slotStart,
                   endTime: slotEnd,
                   date: checkDate.toISOString().split('T')[0],
+                  score,
+                  reasons,
                 });
               }
             }
@@ -229,8 +299,9 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
       }
     }
 
+    suggested.sort((a, b) => b.score - a.score);
     setSuggestions(suggested.slice(0, 10));
-  }, [availability, therapistSchedule, therapistAppointments]);
+  }, [availability, therapistSchedule, therapistAppointments, clientAppointments, selectedTherapistId]);
 
   useEffect(() => {
     if (selectedTherapistId && availability.length > 0 && therapistSchedule.length > 0) {
@@ -240,9 +311,10 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
     }
   }, [selectedTherapistId, availability, therapistSchedule, calculateSuggestions]);
 
-  const applysuggestion = (suggestion: Suggestion) => {
+  const applySuggestion = (suggestion: Suggestion) => {
     form.setValue("date", suggestion.date);
     form.setValue("startTime", suggestion.startTime);
+    setSelectedSuggestion(suggestion);
   };
 
   const getSessionCount = (freq: string, period: string): number => {
@@ -261,6 +333,7 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
     mutationFn: async (data: FormData) => {
       const endTime = calculateEndTime(data.startTime, data.durationMinutes);
       const finalClientId = data.clientId || clientId;
+      const optimizationScore = selectedSuggestion?.score || 0;
       
       if (data.frequency === "puntual") {
         return await apiRequest("POST", "/api/appointments", {
@@ -273,6 +346,7 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
           frequency: "puntual",
           status: data.status,
           notes: data.notes,
+          optimizationScore,
         });
       } else {
         const seriesId = crypto.randomUUID();
@@ -299,6 +373,7 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
             seriesId,
             status: data.status,
             notes: data.notes,
+            optimizationScore: i === 0 ? optimizationScore : 0,
           });
         }
 
@@ -317,6 +392,7 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
         description: `Se ${count === 1 ? 'ha creado 1 cita' : `han creado ${count} citas`} exitosamente`,
       });
       form.reset();
+      setSelectedSuggestion(null);
       onClose();
     },
     onError: (error: any) => {
@@ -407,21 +483,53 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
                       No hay horarios coincidentes. Selecciona manualmente.
                     </p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-3">
                       {suggestions.map((suggestion, index) => {
                         const dayOfMonth = new Date(suggestion.date).getDate();
+                        const monthName = new Date(suggestion.date).toLocaleDateString('es-ES', { month: 'short' });
+                        const isOptimal = suggestion.score > 60;
+                        
                         return (
-                          <Button
-                            key={index}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => applysuggestion(suggestion)}
-                            data-testid={`button-suggestion-${index}`}
-                          >
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {suggestion.dayName} {dayOfMonth} - {suggestion.startTime}
-                          </Button>
+                          <Tooltip key={index}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="flex items-start gap-2 p-3 rounded-md border hover-elevate cursor-pointer"
+                                onClick={() => applySuggestion(suggestion)}
+                                data-testid={`button-suggestion-${index}`}
+                              >
+                                <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium text-sm">
+                                      {suggestion.dayName} {dayOfMonth} {monthName} - {suggestion.startTime}
+                                    </span>
+                                    {isOptimal && (
+                                      <Badge variant="default" className="bg-green-600 hover:bg-green-600" data-testid={`badge-optimal-${index}`}>
+                                        <Star className="h-3 w-3 mr-1" />
+                                        Óptimo
+                                      </Badge>
+                                    )}
+                                    <Badge variant="outline" className="text-xs" data-testid={`badge-score-${index}`}>
+                                      {suggestion.score} pts
+                                    </Badge>
+                                  </div>
+                                  {suggestion.reasons.length > 0 && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {suggestion.reasons.join(' · ')}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="font-semibold mb-1">Score: {suggestion.score} puntos</p>
+                              <ul className="text-xs space-y-1">
+                                {suggestion.reasons.map((reason, i) => (
+                                  <li key={i}>• {reason}</li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
                         );
                       })}
                     </div>

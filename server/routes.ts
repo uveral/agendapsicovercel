@@ -260,6 +260,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/clients/:id/appointments', isAuthenticated, async (req, res) => {
+    try {
+      const appointments = await storage.getClientAppointments(req.params.id);
+      res.json(appointments);
+    } catch (error) {
+      console.error("Error fetching client appointments:", error);
+      res.status(500).json({ message: "Failed to fetch client appointments" });
+    }
+  });
+
   // Client availability routes
   app.get('/api/availability', isAuthenticated, async (req: any, res) => {
     try {

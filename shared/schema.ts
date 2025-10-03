@@ -151,6 +151,24 @@ export const insertAppointmentSchema = createInsertSchema(appointments).omit({
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
 
+export interface SwapSuggestion {
+  conflictingAppointmentId: string;
+  conflictingClientId: string;
+  conflictingClientName: string;
+  conflictingClientPhone?: string;
+  currentSlot: {
+    date: string;
+    startTime: string;
+    endTime: string;
+  };
+  suggestedSlot: {
+    date: string;
+    startTime: string;
+    endTime: string;
+  };
+  rationale: string;
+}
+
 // Settings table
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
