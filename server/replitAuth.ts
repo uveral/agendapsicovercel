@@ -60,9 +60,14 @@ async function upsertUser(
   // Check if user already exists
   const existingUser = await storage.getUser(claims["sub"]);
   
+  // Check if email indicates admin role
+  const email = claims["email"] || "";
+  const isAdminEmail = email.includes("admin@") || email.startsWith("admin");
+  
   if (existingUser) {
-    // User exists - preserve their existing role
-    console.log(`[Auth] Updating existing user ${claims["sub"]} with role: ${existingUser.role}`);
+    // User exists - upgrade to admin if email indicates it, otherwise preserve role
+    const role = isAdminEmail ? "admin" : existingUser.role;
+    console.log(`[Auth] Updating existing user ${claims["sub"]} with role: ${role}`);
     
     await storage.upsertUser({
       id: claims["sub"],
@@ -70,15 +75,15 @@ async function upsertUser(
       firstName: claims["first_name"],
       lastName: claims["last_name"],
       profileImageUrl: claims["profile_image_url"],
-      role: existingUser.role,
+      role,
     });
   } else {
-    // New user - check if this is the first user (make them admin)
+    // New user - admin if first user OR if email indicates admin
     const allUsers = await storage.getAllUsers();
     const isFirstUser = allUsers.length === 0;
-    const role = isFirstUser ? "admin" : "client";
+    const role = (isFirstUser || isAdminEmail) ? "admin" : "client";
     
-    console.log(`[Auth] Creating new user ${claims["sub"]}, isFirstUser: ${isFirstUser}, total users: ${allUsers.length}, role: ${role}`);
+    console.log(`[Auth] Creating new user ${claims["sub"]}, isFirstUser: ${isFirstUser}, isAdminEmail: ${isAdminEmail}, total users: ${allUsers.length}, role: ${role}`);
     
     await storage.upsertUser({
       id: claims["sub"],

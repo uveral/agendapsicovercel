@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -116,14 +116,6 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
     enabled: open && !!selectedTherapistId,
   });
 
-  useEffect(() => {
-    if (selectedTherapistId && availability.length > 0 && therapistSchedule.length > 0) {
-      calculateSuggestions();
-    } else {
-      setSuggestions([]);
-    }
-  }, [selectedTherapistId, availability, therapistSchedule, therapistAppointments]);
-
   const timeRangesOverlap = (
     start1: string,
     end1: string,
@@ -143,7 +135,15 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
     return s1 < e2 && s2 < e1;
   };
 
-  const calculateSuggestions = () => {
+  const parseTime = (time: string): number => {
+    return parseInt(time.split(':')[0]);
+  };
+
+  const formatTime = (hour: number): string => {
+    return `${hour.toString().padStart(2, '0')}:00`;
+  };
+
+  const calculateSuggestions = useCallback(() => {
     const suggested: Suggestion[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -203,15 +203,15 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
     }
 
     setSuggestions(suggested.slice(0, 10));
-  };
+  }, [availability, therapistSchedule, therapistAppointments]);
 
-  const parseTime = (time: string): number => {
-    return parseInt(time.split(':')[0]);
-  };
-
-  const formatTime = (hour: number): string => {
-    return `${hour.toString().padStart(2, '0')}:00`;
-  };
+  useEffect(() => {
+    if (selectedTherapistId && availability.length > 0 && therapistSchedule.length > 0) {
+      calculateSuggestions();
+    } else {
+      setSuggestions([]);
+    }
+  }, [selectedTherapistId, availability, therapistSchedule, calculateSuggestions]);
 
   const applysuggestion = (suggestion: Suggestion) => {
     form.setValue("date", suggestion.date);

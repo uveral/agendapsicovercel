@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -148,9 +148,8 @@ export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: 
 
               {/* Time rows */}
               {hours.map((hour) => (
-                <>
+                <React.Fragment key={`hour-row-${hour}`}>
                   <div 
-                    key={`hour-${hour}`} 
                     className="text-xs text-muted-foreground p-2 flex items-center sticky left-0 bg-card z-10"
                   >
                     {hour}:00
@@ -194,7 +193,7 @@ export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: 
                       </div>
                     );
                   })}
-                </>
+                </React.Fragment>
               ))}
             </div>
           </div>

@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Appointment, User, TherapistWorkingHours } from "@shared/schema";
+import type { Appointment, User } from "@shared/schema";
 
 interface MonthCalendarProps {
   therapistName: string;
@@ -13,23 +12,36 @@ interface MonthCalendarProps {
   onAppointmentClick?: (appointmentId: string) => void;
 }
 
-const calculateHourRange = (schedule: TherapistWorkingHours[]): number[] => {
-  if (!schedule || schedule.length === 0) {
-    return Array.from({ length: 12 }, (_, i) => 9 + i);
+interface CalendarDay {
+  date: Date;
+  isCurrentMonth: boolean;
+}
+
+const getDaysInMonth = (year: number, month: number): CalendarDay[] => {
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const firstDayOfWeek = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+  
+  const startPadding = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+  
+  const days: CalendarDay[] = [];
+  
+  for (let i = startPadding - 1; i >= 0; i--) {
+    const prevMonthDay = new Date(year, month, -i);
+    days.push({ date: prevMonthDay, isCurrentMonth: false });
   }
   
-  let minHour = 24;
-  let maxHour = 0;
-  
-  for (const block of schedule) {
-    const startHour = parseInt(block.startTime.split(':')[0]);
-    const endHour = parseInt(block.endTime.split(':')[0]);
-    minHour = Math.min(minHour, startHour);
-    maxHour = Math.max(maxHour, endHour);
+  for (let day = 1; day <= daysInMonth; day++) {
+    days.push({ date: new Date(year, month, day), isCurrentMonth: true });
   }
   
-  const hourCount = maxHour - minHour;
-  return Array.from({ length: hourCount }, (_, i) => minHour + i);
+  const remaining = 42 - days.length;
+  for (let i = 1; i <= remaining; i++) {
+    days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+  }
+  
+  return days.slice(0, 42);
 };
 
 export function MonthCalendar({ 
@@ -43,25 +55,13 @@ export function MonthCalendar({
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
-  const { data: schedule } = useQuery<TherapistWorkingHours[]>({ 
-    queryKey: ['/api/therapists', therapistId, 'schedule'] 
-  });
-
-  const hours = calculateHourRange(schedule || []);
-  
-  // Calculate days in the current month
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const monthDates = Array.from({ length: daysInMonth }, (_, i) => {
-    return new Date(currentYear, currentMonth, i + 1);
-  });
-
-  // Month names in Spanish
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
 
-  // Navigation functions
+  const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
   const goToPreviousMonth = () => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
@@ -86,30 +86,28 @@ export function MonthCalendar({
     setCurrentYear(now.getFullYear());
   };
 
-  // Find appointment for therapist at a specific time
-  const getAppointment = (date: Date, hour: number): Appointment | undefined => {
-    return appointments.find((apt) => {
+  const getAppointmentsForDay = (date: Date): Appointment[] => {
+    return appointments.filter((apt) => {
       if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
       
       const aptDate = new Date(apt.date);
-      const isSameDay = aptDate.toDateString() === date.toDateString();
-      
-      if (!isSameDay) return false;
-      
-      // Parse start and end times
-      const [startHour] = apt.startTime.split(':').map(Number);
-      const [endHour] = apt.endTime.split(':').map(Number);
-      
-      return hour >= startHour && hour < endHour;
+      return aptDate.toDateString() === date.toDateString();
+    }).sort((a, b) => {
+      return a.startTime.localeCompare(b.startTime);
     });
   };
 
-  // Get client name from appointment
   const getClientName = (appointment: Appointment): string => {
     const client = clients.find((c) => c.id === appointment.clientId);
     if (!client) return 'Cliente';
     return `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
   };
+
+  const isToday = (date: Date): boolean => {
+    return date.toDateString() === today.toDateString();
+  };
+
+  const calendarDays = getDaysInMonth(currentYear, currentMonth);
 
   return (
     <Card>
@@ -149,79 +147,69 @@ export function MonthCalendar({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <div className="inline-block min-w-full">
+        <div className="grid grid-cols-7 gap-px bg-border rounded-md overflow-hidden">
+          {dayNames.map((day, index) => (
             <div 
-              className="grid gap-0.5"
-              style={{
-                gridTemplateColumns: `auto repeat(${daysInMonth}, minmax(50px, 1fr))`
-              }}
+              key={`header-${index}`}
+              className="bg-muted p-2 text-center text-xs font-semibold text-muted-foreground uppercase"
+              data-testid={`header-${day.toLowerCase()}`}
             >
-              {/* Header row */}
-              <div className="text-[10px] font-medium text-muted-foreground uppercase p-1 sticky left-0 bg-card z-10">
-                Hora
-              </div>
-              {monthDates.map((date, i) => {
-                const dayNumber = date.getDate();
-                const isToday = date.toDateString() === today.toDateString();
-                return (
-                  <div 
-                    key={`header-${i}`} 
-                    className="text-center p-1"
-                  >
-                    <div className={`text-[11px] font-medium ${isToday ? 'text-primary' : ''}`}>
-                      {dayNumber}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground">
-                      {['D', 'L', 'M', 'X', 'J', 'V', 'S'][date.getDay()]}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Time rows */}
-              {hours.map((hour) => (
-                <>
-                  <div 
-                    key={`hour-${hour}`} 
-                    className="text-[10px] text-muted-foreground p-1 flex items-center sticky left-0 bg-card z-10"
-                  >
-                    {hour}:00
-                  </div>
-                  {monthDates.map((date, dayIndex) => {
-                    const dayNumber = date.getDate();
-                    const appointment = getAppointment(date, hour);
-                    const hasAppointment = !!appointment;
-                    
-                    return (
-                      <button
-                        key={`${hour}-${dayIndex}`}
-                        className={`p-0.5 border border-border rounded-sm text-[9px] min-h-[32px] transition-colors ${
-                          hasAppointment
-                            ? appointment.status === "confirmed"
-                              ? "bg-chart-1/10 border-chart-1/30 hover-elevate cursor-pointer"
-                              : "bg-chart-3/10 border-chart-3/30 hover-elevate cursor-pointer"
-                            : "bg-card hover-elevate"
-                        }`}
-                        onClick={() => {
-                          if (appointment && onAppointmentClick) {
-                            onAppointmentClick(appointment.id);
-                          }
-                        }}
-                        data-testid={`slot-day${dayNumber}-${hour}`}
-                      >
-                        {hasAppointment && (
-                          <div className="truncate font-medium px-0.5">
-                            {getClientName(appointment)}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </>
-              ))}
+              {day}
             </div>
-          </div>
+          ))}
+
+          {calendarDays.map((calendarDay, index) => {
+            const dayAppointments = getAppointmentsForDay(calendarDay.date);
+            const isTodayDate = isToday(calendarDay.date);
+            const dayNumber = calendarDay.date.getDate();
+            const MAX_VISIBLE_APPOINTMENTS = 4;
+            const visibleAppointments = dayAppointments.slice(0, MAX_VISIBLE_APPOINTMENTS);
+            const remainingCount = dayAppointments.length - MAX_VISIBLE_APPOINTMENTS;
+
+            return (
+              <div
+                key={`day-${index}`}
+                className={`bg-card min-h-24 p-2 flex flex-col ${
+                  !calendarDay.isCurrentMonth ? 'opacity-50' : ''
+                } ${
+                  isTodayDate ? 'bg-primary/10' : ''
+                }`}
+                data-testid={`day-cell-${dayNumber}`}
+              >
+                <div 
+                  className={`text-sm font-medium mb-1 ${
+                    isTodayDate ? 'text-primary' : calendarDay.isCurrentMonth ? '' : 'text-muted-foreground'
+                  }`}
+                >
+                  {dayNumber}
+                </div>
+
+                <div className="flex flex-col gap-1 flex-1">
+                  {visibleAppointments.map((appointment) => (
+                    <button
+                      key={appointment.id}
+                      onClick={() => onAppointmentClick?.(appointment.id)}
+                      className={`text-xs p-1 rounded text-left truncate hover-elevate ${
+                        appointment.status === "confirmed"
+                          ? "bg-chart-1/20 text-chart-1 border border-chart-1/30"
+                          : "bg-chart-3/20 text-chart-3 border border-chart-3/30"
+                      }`}
+                      data-testid={`appointment-${appointment.id}`}
+                    >
+                      <div className="font-medium">{appointment.startTime.slice(0, 5)}</div>
+                      <div className="truncate">{getClientName(appointment)}</div>
+                    </button>
+                  ))}
+                  
+                  {remainingCount > 0 && (
+                    <div className="text-xs text-muted-foreground px-1">
+                      +{remainingCount} más
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
