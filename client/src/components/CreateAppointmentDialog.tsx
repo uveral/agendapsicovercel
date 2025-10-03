@@ -28,6 +28,7 @@ const formSchema = z.object({
   startTime: z.string().min(1, "Selecciona hora de inicio"),
   durationMinutes: z.number().min(15, "La duración mínima es 15 minutos").max(240, "La duración máxima es 4 horas"),
   frequency: z.enum(["puntual", "semanal", "quincenal"]),
+  sessionPeriod: z.enum(["1 mes", "6 meses", "1 año"]),
   status: z.enum(["pending", "confirmed"]),
   notes: z.string().optional(),
 });
@@ -78,12 +79,14 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
       startTime: "",
       durationMinutes: 60,
       frequency: "semanal",
+      sessionPeriod: "6 meses",
       status: "confirmed",
       notes: "",
     },
   });
 
   const frequency = form.watch("frequency");
+  const sessionPeriod = form.watch("sessionPeriod");
   const selectedTherapistId = form.watch("therapistId");
   const startTime = form.watch("startTime");
   const durationMinutes = form.watch("durationMinutes");
@@ -215,10 +218,16 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
     form.setValue("startTime", suggestion.startTime);
   };
 
-  const getSessionCount = (freq: string): number => {
-    if (freq === "semanal") return 104;
-    if (freq === "quincenal") return 52;
-    return 1;
+  const getSessionCount = (freq: string, period: string): number => {
+    if (freq === "puntual") return 1;
+    
+    if (period === "1 mes") {
+      return freq === "semanal" ? 4 : 2;
+    } else if (period === "6 meses") {
+      return freq === "semanal" ? 26 : 13;
+    } else {
+      return freq === "semanal" ? 52 : 26;
+    }
   };
 
   const createMutation = useMutation({
@@ -240,7 +249,7 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
       } else {
         const seriesId = crypto.randomUUID();
         const appointments = [];
-        const sessionCount = getSessionCount(data.frequency);
+        const sessionCount = getSessionCount(data.frequency, data.sessionPeriod);
 
         for (let i = 0; i < sessionCount; i++) {
           const appointmentDate = new Date(data.date);
@@ -349,19 +358,22 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
                     </p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      {suggestions.map((suggestion, index) => (
-                        <Button
-                          key={index}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => applysuggestion(suggestion)}
-                          data-testid={`button-suggestion-${index}`}
-                        >
-                          <Calendar className="h-3 w-3 mr-1" />
-                          {suggestion.dayName} {suggestion.startTime}
-                        </Button>
-                      ))}
+                      {suggestions.map((suggestion, index) => {
+                        const dayOfMonth = new Date(suggestion.date).getDate();
+                        return (
+                          <Button
+                            key={index}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => applysuggestion(suggestion)}
+                            data-testid={`button-suggestion-${index}`}
+                          >
+                            <Calendar className="h-3 w-3 mr-1" />
+                            {suggestion.dayName} {dayOfMonth} - {suggestion.startTime}
+                          </Button>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -389,17 +401,40 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="semanal" id="semanal" data-testid="radio-semanal" />
                         <label htmlFor="semanal" className="text-sm cursor-pointer">
-                          Semanal (104 sesiones - 2 años)
+                          Semanal ({getSessionCount("semanal", sessionPeriod)} sesiones)
                         </label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="quincenal" id="quincenal" data-testid="radio-quincenal" />
                         <label htmlFor="quincenal" className="text-sm cursor-pointer">
-                          Quincenal (52 sesiones - 2 años)
+                          Quincenal ({getSessionCount("quincenal", sessionPeriod)} sesiones)
                         </label>
                       </div>
                     </RadioGroup>
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="sessionPeriod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Período de sesiones</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-session-period">
+                        <SelectValue placeholder="Selecciona período" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="1 mes">1 mes</SelectItem>
+                      <SelectItem value="6 meses">6 meses</SelectItem>
+                      <SelectItem value="1 año">1 año</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -463,8 +498,6 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="30">30 minutos</SelectItem>
-                        <SelectItem value="45">45 minutos</SelectItem>
                         <SelectItem value="60">60 minutos (1 hora)</SelectItem>
                         <SelectItem value="90">90 minutos (1.5 horas)</SelectItem>
                         <SelectItem value="120">120 minutos (2 horas)</SelectItem>
@@ -544,7 +577,7 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
                 ) : (
                   frequency === "puntual" 
                     ? "Crear Cita" 
-                    : `Crear ${getSessionCount(frequency)} Citas`
+                    : `Crear ${getSessionCount(frequency, sessionPeriod)} Citas`
                 )}
               </Button>
             </div>
