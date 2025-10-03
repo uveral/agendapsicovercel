@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, Fragment } from "react";
 
 interface TimeSlot {
   id: string;
@@ -70,8 +70,8 @@ export function WeekCalendar({ therapistName, schedule, onSlotClick }: WeekCalen
             ))}
             
             {hours.map((hour) => (
-              <>
-                <div key={hour} className="text-xs text-muted-foreground p-2 flex items-center">
+              <Fragment key={hour}>
+                <div className="text-xs text-muted-foreground p-2 flex items-center">
                   {hour}
                 </div>
                 {schedule.map((day) => {
@@ -103,7 +103,7 @@ export function WeekCalendar({ therapistName, schedule, onSlotClick }: WeekCalen
                     </button>
                   );
                 })}
-              </>
+              </Fragment>
             ))}
           </div>
         </div>
