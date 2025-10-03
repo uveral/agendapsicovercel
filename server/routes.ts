@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
-import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema } from "@shared/schema";
+import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -78,6 +78,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/therapists/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const schedule = await storage.getTherapistWorkingHours(req.params.id);
+      res.json(schedule);
+    } catch (error) {
+      console.error("Error fetching therapist schedule:", error);
+      res.status(500).json({ message: "Failed to fetch therapist schedule" });
+    }
+  });
+
+  app.put('/api/therapists/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const therapistId = req.params.id;
+      const hoursData = Array.isArray(req.body) ? req.body : [req.body];
+      const validatedData = [];
+      
+      for (const data of hoursData) {
+        const validated = insertTherapistWorkingHoursSchema.parse({
+          ...data,
+          therapistId,
+        });
+        validatedData.push(validated);
+      }
+      
+      const schedule = await storage.setTherapistWorkingHours(therapistId, validatedData);
+      res.json(schedule);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error updating therapist schedule:", error);
+      res.status(500).json({ message: "Failed to update therapist schedule" });
+    }
+  });
+
   // Client routes
   app.get('/api/clients', isAuthenticated, isAdmin, async (req, res) => {
     try {
@@ -86,6 +121,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching clients:", error);
       res.status(500).json({ message: "Failed to fetch clients" });
+    }
+  });
+
+  app.post('/api/clients', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const data = insertManualClientSchema.parse(req.body);
+      const client = await storage.createManualClient(data);
+      res.status(201).json(client);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error creating client:", error);
+      res.status(500).json({ message: "Failed to create client" });
     }
   });
 

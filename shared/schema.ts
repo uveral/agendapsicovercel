@@ -38,6 +38,16 @@ export const users = pgTable("users", {
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
+// Schema for creating clients manually (admin/therapist action)
+export const insertManualClientSchema = z.object({
+  firstName: z.string().min(1, "Nombre es requerido"),
+  lastName: z.string().min(1, "Apellido es requerido"),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  phone: z.string().optional(),
+});
+
+export type InsertManualClient = z.infer<typeof insertManualClientSchema>;
+
 // Therapists table
 export const therapists = pgTable("therapists", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -77,6 +87,26 @@ export const insertClientAvailabilitySchema = createInsertSchema(clientAvailabil
 
 export type InsertClientAvailability = z.infer<typeof insertClientAvailabilitySchema>;
 export type ClientAvailability = typeof clientAvailability.$inferSelect;
+
+// Therapist working hours table
+export const therapistWorkingHours = pgTable("therapist_working_hours", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  therapistId: varchar("therapist_id").notNull().references(() => therapists.id, { onDelete: "cascade" }),
+  dayOfWeek: integer("day_of_week").notNull(), // 0-6 (Sunday-Saturday)
+  startTime: varchar("start_time").notNull(), // Format: "HH:mm"
+  endTime: varchar("end_time").notNull(), // Format: "HH:mm"
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTherapistWorkingHoursSchema = createInsertSchema(therapistWorkingHours).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTherapistWorkingHours = z.infer<typeof insertTherapistWorkingHoursSchema>;
+export type TherapistWorkingHours = typeof therapistWorkingHours.$inferSelect;
 
 // Appointments table
 export const appointments = pgTable("appointments", {

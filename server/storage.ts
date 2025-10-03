@@ -3,6 +3,7 @@ import {
   therapists,
   clientAvailability,
   appointments,
+  therapistWorkingHours,
   type User,
   type UpsertUser,
   type Therapist,
@@ -11,6 +12,9 @@ import {
   type InsertClientAvailability,
   type Appointment,
   type InsertAppointment,
+  type InsertManualClient,
+  type TherapistWorkingHours,
+  type InsertTherapistWorkingHours,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc } from "drizzle-orm";
@@ -44,6 +48,11 @@ export interface IStorage {
   
   // Client operations
   getAllClients(): Promise<User[]>;
+  createManualClient(client: InsertManualClient): Promise<User>;
+  
+  // Therapist working hours operations
+  getTherapistWorkingHours(therapistId: string): Promise<TherapistWorkingHours[]>;
+  setTherapistWorkingHours(therapistId: string, hours: InsertTherapistWorkingHours[]): Promise<TherapistWorkingHours[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -163,6 +172,36 @@ export class DatabaseStorage implements IStorage {
   // Client operations
   async getAllClients(): Promise<User[]> {
     return await db.select().from(users).where(eq(users.role, "client")).orderBy(asc(users.firstName));
+  }
+
+  async createManualClient(clientData: InsertManualClient): Promise<User> {
+    const [client] = await db
+      .insert(users)
+      .values({
+        firstName: clientData.firstName,
+        lastName: clientData.lastName,
+        email: clientData.email || null,
+        role: "client",
+      })
+      .returning();
+    return client;
+  }
+
+  // Therapist working hours operations
+  async getTherapistWorkingHours(therapistId: string): Promise<TherapistWorkingHours[]> {
+    return await db.select().from(therapistWorkingHours).where(eq(therapistWorkingHours.therapistId, therapistId)).orderBy(asc(therapistWorkingHours.dayOfWeek));
+  }
+
+  async setTherapistWorkingHours(therapistId: string, hours: InsertTherapistWorkingHours[]): Promise<TherapistWorkingHours[]> {
+    await db.delete(therapistWorkingHours).where(eq(therapistWorkingHours.therapistId, therapistId));
+    
+    const created = [];
+    for (const hour of hours) {
+      const [workingHour] = await db.insert(therapistWorkingHours).values(hour).returning();
+      created.push(workingHour);
+    }
+    
+    return created;
   }
 }
 
