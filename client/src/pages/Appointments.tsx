@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AppointmentCard } from "@/components/AppointmentCard";
+import { AppointmentDialog } from "@/components/AppointmentDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import type { Appointment, Therapist, User } from "@shared/schema";
@@ -17,6 +18,7 @@ import type { Appointment, Therapist, User } from "@shared/schema";
 export default function Appointments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const { data: appointments = [], isLoading } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
@@ -75,7 +77,7 @@ export default function Appointments() {
             Gestiona todas las citas del centro
           </p>
         </div>
-        <Button data-testid="button-new-appointment" onClick={() => console.log('New appointment')}>
+        <Button data-testid="button-new-appointment" onClick={() => setIsDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nueva cita
         </Button>
@@ -162,6 +164,8 @@ export default function Appointments() {
           ))
         )}
       </div>
+
+      <AppointmentDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
     </div>
   );
 }
