@@ -311,6 +311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const data of availabilityData) {
         const validated = insertClientAvailabilitySchema.parse({
+          userId: clientId,
           dayOfWeek: data.dayOfWeek,
           startTime: data.startTime,
           endTime: data.endTime,

@@ -68,9 +68,29 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
       onClose();
     },
     onError: (error: any) => {
+      let errorMessage = "No se pudo guardar la disponibilidad";
+      
+      if (error.message) {
+        try {
+          const parts = error.message.split(': ');
+          if (parts.length > 1) {
+            const jsonPart = parts.slice(1).join(': ');
+            const parsed = JSON.parse(jsonPart);
+            if (parsed.message) {
+              errorMessage = parsed.message;
+              if (parsed.errors && parsed.errors.length > 0) {
+                errorMessage += `: ${parsed.errors[0].message || JSON.stringify(parsed.errors[0])}`;
+              }
+            }
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
-        title: "Error",
-        description: error.message || "No se pudo guardar la disponibilidad",
+        title: "Error al guardar",
+        description: errorMessage,
         variant: "destructive",
       });
     },
