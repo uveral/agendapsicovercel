@@ -69,10 +69,30 @@ This is a comprehensive scheduling management system designed for a psychology c
   - "Editar" button opens availability matrix editor
   - "Dar Cita" button opens smart appointment creation dialog
 
+**Milestone 5: PDF Report Generation with Centro Orienta Branding**
+- Implemented professional PDF generation system with embedded real logo:
+  - **Logo Embedding**: Uses sharp library to convert SVG logo to PNG (200x100) at runtime
+  - **Centro Orienta Branding**: All PDFs include logo at (15, 10) and green branding text
+  - **Three Report Types**:
+    - Therapist Monthly Report: GET /api/therapists/:therapistId/appointments/pdf?month=YYYY-MM
+    - Global Monthly Report: GET /api/reports/monthly-pdf?month=YYYY-MM (admin-only)
+    - Daily Report: GET /api/reports/daily-pdf?date=YYYY-MM-DD (admin-only)
+  - **Authorization**: Admins see all reports, therapists only their own monthly reports
+  - **Error Handling**: Returns HTTP 500 if logo conversion fails (no silent failures)
+- Created TherapistDetail page:
+  - Therapist profile with appointment history
+  - Month selector for PDF download
+  - "Ver detalles" button from TherapistCard navigates to /therapists/:id
+- Enhanced Dashboard with Reports section:
+  - Monthly report download (all therapists)
+  - Daily report download (specific date)
+  - Month/date selectors with proper validation
+
 **Technical Achievements**:
 - Zero authorization leaks across all appointment endpoints
 - Proper time interval math prevents double-booking
 - Series operations maintain data integrity (atomic deletes, proper detachment)
+- PDF generation with real logo embedding using sharp (server-side SVG-to-PNG conversion)
 - All features include loading states, error handling, and cache invalidation
 - Comprehensive data-testid attributes for testing throughout
 
@@ -113,9 +133,12 @@ Preferred communication style: Simple, everyday language.
 - `/api/auth/*` - User authentication via Replit Auth (OpenID Connect)
 - `/api/therapists` - Therapist CRUD operations
 - `/api/therapists/:id/schedule` - Therapist working hours management (GET/PUT)
+- `/api/therapists/:id/appointments/pdf` - Therapist monthly PDF report generation
 - `/api/clients` - Client listing and manual creation (GET/POST)
 - `/api/appointments` - Appointment CRUD operations
 - `/api/availability` - Client availability preferences with custom time blocks
+- `/api/reports/monthly-pdf` - Global monthly PDF report (admin-only)
+- `/api/reports/daily-pdf` - Daily PDF report (admin-only)
 
 **Authentication & Authorization**:
 - Replit Auth integration using OpenID Connect with Passport.js strategy

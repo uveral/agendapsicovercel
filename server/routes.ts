@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
 import { z } from "zod";
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Therapist, Appointment, User } from "@shared/schema";
 import sharp from 'sharp';
@@ -535,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PDF generation helper functions
   async function getLogoPNGDataURI(): Promise<string> {
     try {
-      const svgPath = path.join(__dirname, '../client/public/logo-centro-orienta.svg');
+      const svgPath = path.join(process.cwd(), 'client/public/logo-centro-orienta.svg');
       const svgBuffer = fs.readFileSync(svgPath);
       
       const pngBuffer = await sharp(svgBuffer)
