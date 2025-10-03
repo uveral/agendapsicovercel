@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
-import { MonthCalendar } from "@/components/MonthCalendar";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
@@ -208,14 +207,20 @@ export default function Calendar() {
           ) : (
             <div className="space-y-6">
               {therapists.map((therapist) => (
-                <MonthCalendar
-                  key={therapist.id}
-                  therapistName={therapist.name}
-                  therapistId={therapist.id}
-                  appointments={appointments}
-                  clients={clients}
-                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                />
+                <div key={therapist.id} className="space-y-4">
+                  <TherapistMonthView
+                    therapistName={therapist.name}
+                    therapistId={therapist.id}
+                    appointments={appointments}
+                    clients={clients}
+                    onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                  />
+                  <AvailabilitySummary
+                    therapistId={therapist.id}
+                    appointments={appointments}
+                    showTherapistName={false}
+                  />
+                </div>
               ))}
               {therapists.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
