@@ -10,42 +10,71 @@ This is a comprehensive scheduling management system designed for a psychology c
 
 ## Recent Changes
 
-**October 3, 2025** - Branding Update & Feature Implementation
+**October 3, 2025** - Complete Recurring Appointment System Implementation
 
-**Branding Actualización:**
-- Integrado logo oficial de Centro Orienta en sidebar
-- Adaptada paleta de colores al verde corporativo (#B7CD95)
-- Colores primary actualizados: 95 45% 35% (cumple WCAG AA)
-- Tipografía mantenida: Inter (profesional y moderna)
+**Milestone 1: Schema, Permissions & API Foundation**
+- Extended appointment schema with recurring appointment support:
+  - seriesId: Groups recurring appointments together
+  - frequency: "puntual" (one-time), "semanal" (weekly), or "quincenal" (biweekly)
+  - durationMinutes: Optional duration override (defaults to 1 hour)
+- Implemented therapist-user authorization model:
+  - Added therapistId field to users table
+  - Role-based permissions: admins manage all appointments, therapists manage only their own
+  - Therapists cannot reassign their appointments to other therapists
+- Enhanced API authorization:
+  - GET /api/appointments routes by role (admin/therapist/client)
+  - canManageAppointment middleware for create/update/delete operations
+  - Fixed authorization leak in GET /api/therapists/:id/appointments
 
-**October 3, 2025** - Complete Feature Set Implementation
-- **Schedule Management Improvements**:
-  - Fixed TherapistScheduleDialog to display Monday as first day of week (with DB conversion)
-  - Fixed disappearing time blocks issue by adjusting useEffect dependencies
-  - Relaxed therapist schedule viewing permissions (any authenticated user can view)
-  - Admin-only requirement maintained for editing therapist schedules
-  
-- **Client Management Enhancements**:
-  - Added client detail page with full profile, availability, and appointment history
-  - Implemented "Ver detalles" button navigation from client cards
-  - Added delete functionality for clients with confirmation dialog
-  - Any authenticated user can view and create clients
-  
-- **Therapist Management**:
-  - Added delete functionality for therapists with confirmation dialog
-  - Maintained admin-only requirement for therapist creation/deletion
-  
-- **Appointment System**:
-  - Implemented appointment creation dialog with full form validation
-  - Admin-only access for creating appointments (security requirement)
-  - Fixed React key warning in WeekCalendar component
-  
-- **Development Tools**:
-  - Added role switching capability (admin ↔ client) for testing in development
-  - Protected by ALLOW_ROLE_SWITCHING flag and NODE_ENV check
-  - Hidden in production for security
-  
-- All features tested end-to-end successfully with comprehensive test coverage
+**Milestone 2: Calendar Foundation**
+- Built dual-view calendar system:
+  - **Vista General**: Occupancy grid showing 9:00-20:00 × Mon-Sun with color-coded therapist availability
+  - **Vista Individual**: Per-therapist weekly calendar with client names in time slots
+- Implemented OccupancyGrid component:
+  - Small colored squares (one per therapist per hour)
+  - Tooltips showing therapist name and availability status
+  - Clickable squares to view/edit appointments
+- Wired "Ver calendario" button from Therapists page:
+  - Navigates to /calendar?therapist=id with pre-selected therapist
+  - Automatically switches to Vista Individual view
+
+**Milestone 3: Recurring Appointment Management**
+- Created AppointmentEditDialog with full series support:
+  - Edit/delete options for recurring appointments:
+    - "Solo esta cita": Affects only selected appointment (breaks from series, sets frequency="puntual")
+    - "Esta y todas las siguientes": Affects selected appointment and all future occurrences
+  - Frequency change feature: Converts series between weekly ↔ biweekly with date recalculation
+  - Non-recurring appointments show simplified edit/delete without scope options
+- Implemented backend series endpoints:
+  - DELETE /api/appointments/:id/series?scope=[this_only|this_and_future]
+  - PATCH /api/appointments/:id/series?scope=[this_only|this_and_future]
+  - PATCH /api/appointments/:id/frequency (changes frequency for entire series)
+- Fixed critical bug: "Delete this only" now actually deletes the appointment instead of leaving it orphaned
+
+**Milestone 4: Client Detail Enhancements**
+- Created ClientAvailabilityMatrix component:
+  - Interactive 9:00-20:00 × Mon-Sun grid for marking client availability
+  - Click cells to toggle availability (selected cells show in primary color)
+  - Intelligently merges consecutive hours into time blocks when saving
+  - PUT /api/availability/:clientId endpoint for atomic replacement
+- Built CreateAppointmentDialog with intelligent scheduling:
+  - **Smart Suggestions**: Calculates overlapping time slots between client and therapist availability
+  - **Conflict Detection**: Fixed critical bug - now uses proper time interval overlap detection (handles mid-hour appointments, multi-hour slots, partial overlaps)
+  - **Recurring Appointment Creation**: 
+    - Radio buttons: Puntual | Semanal | Quincenal
+    - Session count input (creates series with unique seriesId)
+    - Generates multiple appointments with correct date intervals
+  - Manual date/time selection fallback if no suggestions match
+- Enhanced ClientDetail page:
+  - "Editar" button opens availability matrix editor
+  - "Dar Cita" button opens smart appointment creation dialog
+
+**Technical Achievements**:
+- Zero authorization leaks across all appointment endpoints
+- Proper time interval math prevents double-booking
+- Series operations maintain data integrity (atomic deletes, proper detachment)
+- All features include loading states, error handling, and cache invalidation
+- Comprehensive data-testid attributes for testing throughout
 
 ## User Preferences
 
