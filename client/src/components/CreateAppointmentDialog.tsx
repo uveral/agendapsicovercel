@@ -26,9 +26,8 @@ const formSchema = z.object({
   therapistId: z.string().min(1, "Selecciona un terapeuta"),
   date: z.string().min(1, "Selecciona una fecha"),
   startTime: z.string().min(1, "Selecciona hora de inicio"),
-  endTime: z.string().min(1, "Selecciona hora de fin"),
+  durationMinutes: z.number().min(15, "La duración mínima es 15 minutos").max(240, "La duración máxima es 4 horas"),
   frequency: z.enum(["puntual", "semanal", "quincenal"]),
-  sessionCount: z.number().min(1).max(52),
   status: z.enum(["pending", "confirmed"]),
   notes: z.string().optional(),
 });
@@ -45,6 +44,28 @@ interface Suggestion {
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+const generateTimeOptions = () => {
+  const options: string[] = [];
+  for (let hour = 8; hour <= 20; hour++) {
+    options.push(`${hour.toString().padStart(2, '0')}:00`);
+    if (hour < 20) {
+      options.push(`${hour.toString().padStart(2, '0')}:30`);
+    }
+  }
+  return options;
+};
+
+const TIME_OPTIONS = generateTimeOptions();
+
+const calculateEndTime = (startTime: string, durationMinutes: number): string => {
+  const [hours, minutes] = startTime.split(':').map(Number);
+  const startMinutes = hours * 60 + minutes;
+  const endMinutes = startMinutes + durationMinutes;
+  const endHours = Math.floor(endMinutes / 60);
+  const endMins = endMinutes % 60;
+  return `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
+};
+
 export default function CreateAppointmentDialog({ open, clientId, onClose }: CreateAppointmentDialogProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -55,9 +76,8 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
       therapistId: "",
       date: "",
       startTime: "",
-      endTime: "",
-      frequency: "puntual",
-      sessionCount: 4,
+      durationMinutes: 60,
+      frequency: "semanal",
       status: "confirmed",
       notes: "",
     },
@@ -65,6 +85,8 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
 
   const frequency = form.watch("frequency");
   const selectedTherapistId = form.watch("therapistId");
+  const startTime = form.watch("startTime");
+  const durationMinutes = form.watch("durationMinutes");
 
   const { data: client } = useQuery<User>({
     queryKey: [`/api/clients/${clientId}`],
@@ -191,18 +213,26 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
   const applysuggestion = (suggestion: Suggestion) => {
     form.setValue("date", suggestion.date);
     form.setValue("startTime", suggestion.startTime);
-    form.setValue("endTime", suggestion.endTime);
+  };
+
+  const getSessionCount = (freq: string): number => {
+    if (freq === "semanal") return 104;
+    if (freq === "quincenal") return 52;
+    return 1;
   };
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const endTime = calculateEndTime(data.startTime, data.durationMinutes);
+      
       if (data.frequency === "puntual") {
         return await apiRequest("POST", "/api/appointments", {
           clientId,
           therapistId: data.therapistId,
           date: data.date,
           startTime: data.startTime,
-          endTime: data.endTime,
+          endTime: endTime,
+          durationMinutes: data.durationMinutes,
           frequency: "puntual",
           status: data.status,
           notes: data.notes,
@@ -210,8 +240,9 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
       } else {
         const seriesId = crypto.randomUUID();
         const appointments = [];
+        const sessionCount = getSessionCount(data.frequency);
 
-        for (let i = 0; i < data.sessionCount; i++) {
+        for (let i = 0; i < sessionCount; i++) {
           const appointmentDate = new Date(data.date);
           
           if (data.frequency === "semanal") {
@@ -225,7 +256,8 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
             therapistId: data.therapistId,
             date: appointmentDate.toISOString().split('T')[0],
             startTime: data.startTime,
-            endTime: data.endTime,
+            endTime: endTime,
+            durationMinutes: data.durationMinutes,
             frequency: data.frequency,
             seriesId,
             status: data.status,
@@ -264,6 +296,8 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
   };
 
   const clientName = client ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email : '';
+
+  const endTime = startTime && durationMinutes ? calculateEndTime(startTime, durationMinutes) : "";
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -334,50 +368,6 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
               </Card>
             )}
 
-            <div className="grid grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fecha</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} data-testid="input-date" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="startTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Hora inicio</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} data-testid="input-start-time" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="endTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Hora fin</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} data-testid="input-end-time" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
             <FormField
               control={form.control}
               name="frequency"
@@ -399,13 +389,13 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="semanal" id="semanal" data-testid="radio-semanal" />
                         <label htmlFor="semanal" className="text-sm cursor-pointer">
-                          Semanal
+                          Semanal (104 sesiones - 2 años)
                         </label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="quincenal" id="quincenal" data-testid="radio-quincenal" />
                         <label htmlFor="quincenal" className="text-sm cursor-pointer">
-                          Quincenal
+                          Quincenal (52 sesiones - 2 años)
                         </label>
                       </div>
                     </RadioGroup>
@@ -415,28 +405,85 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
               )}
             />
 
-            {frequency !== "puntual" && (
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="sessionCount"
+                name="date"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Número de sesiones</FormLabel>
+                    <FormLabel>Fecha de inicio</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        min="1"
-                        max="52"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        data-testid="input-session-count"
-                      />
+                      <Input type="date" {...field} data-testid="input-date" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
+
+              <FormField
+                control={form.control}
+                name="startTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Hora de inicio</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-start-time">
+                          <SelectValue placeholder="Selecciona hora" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TIME_OPTIONS.map((time) => (
+                          <SelectItem key={time} value={time}>
+                            {time}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duración (minutos)</FormLabel>
+                    <Select 
+                      onValueChange={(value) => field.onChange(parseInt(value))} 
+                      value={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-duration">
+                          <SelectValue placeholder="Selecciona duración" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="30">30 minutos</SelectItem>
+                        <SelectItem value="45">45 minutos</SelectItem>
+                        <SelectItem value="60">60 minutos (1 hora)</SelectItem>
+                        <SelectItem value="90">90 minutos (1.5 horas)</SelectItem>
+                        <SelectItem value="120">120 minutos (2 horas)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {endTime && (
+                <div className="space-y-2">
+                  <FormLabel>Hora de fin (calculada)</FormLabel>
+                  <div className="h-9 px-3 py-2 rounded-md border border-input bg-muted flex items-center text-sm" data-testid="text-end-time">
+                    {endTime}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <FormField
               control={form.control}
@@ -495,7 +542,9 @@ export default function CreateAppointmentDialog({ open, clientId, onClose }: Cre
                     Creando...
                   </>
                 ) : (
-                  frequency === "puntual" ? "Crear Cita" : `Crear ${form.watch("sessionCount")} Citas`
+                  frequency === "puntual" 
+                    ? "Crear Cita" 
+                    : `Crear ${getSessionCount(frequency)} Citas`
                 )}
               </Button>
             </div>
