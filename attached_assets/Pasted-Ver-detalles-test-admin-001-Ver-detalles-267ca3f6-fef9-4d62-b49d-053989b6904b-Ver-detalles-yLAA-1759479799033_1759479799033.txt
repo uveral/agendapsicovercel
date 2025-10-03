@@ -1,0 +1,27 @@
+Ver detalles: test-admin-001
+Ver detalles: 267ca3f6-fef9-4d62-b49d-053989b6904b
+Ver detalles: yLAA4O
+Warning: Each child in a list should have a unique &quot;key&quot; prop.
+
+Check the render method of `WeekCalendar`. See https://reactjs.org/link/warning-keys for more information.
+    at WeekCalendar (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/src/components/WeekCalendar.tsx:23:32)
+    at div
+    at div
+    at div
+    at Calendar (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/src/pages/Calendar.tsx:32:53)
+    at Route (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=8995d0ba:323:16)
+    at Switch (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=8995d0ba:379:17)
+    at Router (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/src/App.tsx?v=vwTGfl--6sgipang1rh4x:36:19)
+    at main
+    at div
+    at div
+    at div
+    at Provider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-IKZDNW7I.js?v=8995d0ba:43:15)
+    at TooltipProvider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=8995d0ba:63:5)
+    at SidebarProvider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/src/components/ui/sidebar.tsx:59:3)
+    at AppContent (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/src/App.tsx?v=vwTGfl--6sgipang1rh4x:96:42)
+    at Provider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-IKZDNW7I.js?v=8995d0ba:43:15)
+    at TooltipProvider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=8995d0ba:63:5)
+    at ThemeProvider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/src/lib/ThemeProvider.tsx:25:3)
+    at QueryClientProvider (https://1b47c08f-02db-4d60-ad05-1301886a3508-00-ohmuhm5n29jf.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=8995d0ba:2805:3)
+    at App

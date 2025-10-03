@@ -78,7 +78,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/therapists/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
+  // Any authenticated user can view therapist schedules
+  app.get('/api/therapists/:id/schedule', isAuthenticated, async (req, res) => {
     try {
       const schedule = await storage.getTherapistWorkingHours(req.params.id);
       res.json(schedule);
@@ -88,6 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Only admins can modify therapist working hours
   app.put('/api/therapists/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
     try {
       const therapistId = req.params.id;

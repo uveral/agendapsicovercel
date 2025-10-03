@@ -30,13 +30,13 @@ interface ScheduleSlot {
 }
 
 const dayNames = [
-  "Domingo",
   "Lunes",
   "Martes",
   "Miércoles",
   "Jueves",
   "Viernes",
   "Sábado",
+  "Domingo",
 ];
 
 export function TherapistScheduleDialog({
@@ -54,24 +54,33 @@ export function TherapistScheduleDialog({
     enabled: open,
   });
 
-  // Initialize schedule slots when data is loaded
+  // Initialize schedule slots when dialog opens or when schedule data loads from server
+  // The length check prevents overwriting user edits
   useEffect(() => {
-    if (existingSchedule.length > 0) {
-      const slots = existingSchedule.map((slot) => ({
-        dayOfWeek: slot.dayOfWeek,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-      }));
-      setScheduleSlots(slots);
-    } else {
-      setScheduleSlots([]);
+    if (open) {
+      if (existingSchedule.length > 0) {
+        // Convert from DB format (0=Sunday) to UI format (0=Monday)
+        const slots = existingSchedule.map((slot) => ({
+          dayOfWeek: (slot.dayOfWeek + 6) % 7,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        }));
+        setScheduleSlots(slots);
+      } else {
+        setScheduleSlots([]);
+      }
     }
-  }, [existingSchedule]);
+  }, [open, existingSchedule]);
 
   // Save schedule mutation
   const saveMutation = useMutation({
     mutationFn: async (slots: ScheduleSlot[]) => {
-      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, slots);
+      // Convert from UI format (0=Monday) to DB format (0=Sunday)
+      const dbSlots = slots.map(slot => ({
+        ...slot,
+        dayOfWeek: (slot.dayOfWeek + 1) % 7
+      }));
+      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, dbSlots);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/therapists", therapistId, "schedule"] });
