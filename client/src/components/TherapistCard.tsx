@@ -2,7 +2,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Settings } from "lucide-react";
+import { Calendar, Clock, Settings, Trash2 } from "lucide-react";
 
 interface TherapistCardProps {
   id: string;
@@ -12,6 +12,7 @@ interface TherapistCardProps {
   upcomingAppointments: number;
   onViewCalendar: (id: string) => void;
   onManageSchedule?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 export function TherapistCard({
@@ -22,6 +23,7 @@ export function TherapistCard({
   upcomingAppointments,
   onViewCalendar,
   onManageSchedule,
+  onDelete,
 }: TherapistCardProps) {
   const initials = name
     .split(" ")
@@ -45,6 +47,16 @@ export function TherapistCard({
             </h3>
             <p className="text-sm text-muted-foreground truncate">{specialty}</p>
           </div>
+          {onDelete && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => onDelete(id)}
+              data-testid={`button-delete-therapist-${id}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

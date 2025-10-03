@@ -19,6 +19,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -39,6 +49,7 @@ export default function Therapists() {
   const [filterSpecialty, setFilterSpecialty] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [scheduleDialogTherapist, setScheduleDialogTherapist] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTherapist, setDeleteTherapist] = useState<{ id: string; name: string } | null>(null);
   const { toast } = useToast();
 
   const form = useForm<InsertTherapist>({
@@ -68,6 +79,27 @@ export default function Therapists() {
       toast({
         title: "Error",
         description: error.message || "No se pudo crear el terapeuta",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/therapists/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+      setDeleteTherapist(null);
+      toast({
+        title: "Terapeuta eliminado",
+        description: "El terapeuta ha sido eliminado exitosamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el terapeuta",
         variant: "destructive",
       });
     },
@@ -172,6 +204,12 @@ export default function Therapists() {
                 setScheduleDialogTherapist({ id: therapistData.id, name: therapistData.name });
               }
             }}
+            onDelete={(id) => {
+              const therapistData = therapists.find(t => t.id === id);
+              if (therapistData) {
+                setDeleteTherapist({ id: therapistData.id, name: therapistData.name });
+              }
+            }}
           />
         ))}
       </div>
@@ -274,6 +312,27 @@ export default function Therapists() {
           }}
         />
       )}
+
+      <AlertDialog open={!!deleteTherapist} onOpenChange={(open) => !open && setDeleteTherapist(null)}>
+        <AlertDialogContent data-testid="dialog-delete-therapist">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar terapeuta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar a {deleteTherapist?.name}? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTherapist && deleteMutation.mutate(deleteTherapist.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

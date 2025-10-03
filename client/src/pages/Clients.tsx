@@ -17,6 +17,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -30,6 +40,7 @@ export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyWithAvailability, setShowOnlyWithAvailability] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteClient, setDeleteClient] = useState<{ id: string; name: string } | null>(null);
   const { toast } = useToast();
 
   const form = useForm<InsertManualClient>({
@@ -59,6 +70,27 @@ export default function Clients() {
       toast({
         title: "Error",
         description: error.message || "No se pudo crear el cliente",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/clients/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      setDeleteClient(null);
+      toast({
+        title: "Cliente eliminado",
+        description: "El cliente ha sido eliminado exitosamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el cliente",
         variant: "destructive",
       });
     },
@@ -169,6 +201,13 @@ export default function Clients() {
             hasAvailability={client.hasAvailability}
             nextAppointment={client.nextAppointment}
             onViewDetails={(id) => console.log('Ver detalles:', id)}
+            onDelete={(id) => {
+              const clientData = clients.find(c => c.id === id);
+              if (clientData) {
+                const name = `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim() || clientData.email || 'Usuario';
+                setDeleteClient({ id: clientData.id, name });
+              }
+            }}
           />
         ))}
       </div>
@@ -258,6 +297,27 @@ export default function Clients() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteClient} onOpenChange={(open) => !open && setDeleteClient(null)}>
+        <AlertDialogContent data-testid="dialog-delete-client">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar a {deleteClient?.name}? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteClient && deleteMutation.mutate(deleteClient.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

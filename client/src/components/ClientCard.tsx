@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Mail, Phone } from "lucide-react";
+import { Calendar, Mail, Phone, Trash2 } from "lucide-react";
 
 interface ClientCardProps {
   id: string;
@@ -12,6 +12,7 @@ interface ClientCardProps {
   hasAvailability: boolean;
   nextAppointment?: string;
   onViewDetails: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 export function ClientCard({
@@ -22,6 +23,7 @@ export function ClientCard({
   hasAvailability,
   nextAppointment,
   onViewDetails,
+  onDelete,
 }: ClientCardProps) {
   const initials = name
     .split(" ")
@@ -68,15 +70,27 @@ export function ClientCard({
             <span className="text-muted-foreground">Próxima: {nextAppointment}</span>
           </div>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => onViewDetails(id)}
-          data-testid={`button-view-details-${id}`}
-        >
-          Ver detalles
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => onViewDetails(id)}
+            data-testid={`button-view-details-${id}`}
+          >
+            Ver detalles
+          </Button>
+          {onDelete && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDelete(id)}
+              data-testid={`button-delete-client-${id}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

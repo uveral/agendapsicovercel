@@ -49,6 +49,7 @@ export interface IStorage {
   // Client operations
   getAllClients(): Promise<User[]>;
   createManualClient(client: InsertManualClient): Promise<User>;
+  deleteClient(id: string): Promise<void>;
   
   // Therapist working hours operations
   getTherapistWorkingHours(therapistId: string): Promise<TherapistWorkingHours[]>;
@@ -185,6 +186,10 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return client;
+  }
+
+  async deleteClient(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
   }
 
   // Therapist working hours operations
