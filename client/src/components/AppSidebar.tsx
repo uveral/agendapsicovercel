@@ -48,14 +48,12 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
-            <Calendar className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-base">Centro Psicología</h2>
-            <p className="text-xs text-muted-foreground">Gestión de Horarios</p>
-          </div>
+        <div className="flex items-center gap-3">
+          <img 
+            src="/logo-centro-orienta.svg" 
+            alt="Centro Orienta Logo" 
+            className="h-10 w-auto"
+          />
         </div>
       </SidebarHeader>
       <SidebarContent>

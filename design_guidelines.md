@@ -15,13 +15,15 @@
 
 ### A. Paleta de Colores
 
+**Color Corporativo:** Verde #B7CD95 (HSL: 95 35% 70%) del logo de Centro Orienta
+
 **Modo Oscuro (Primario):**
 - Background principal: 220 18% 12%
 - Background secundario: 220 16% 16%
 - Background terciario: 220 15% 20%
 - Bordes: 220 12% 28%
-- Primary brand: 210 90% 58% (azul profesional, confianza)
-- Success (cita confirmada): 142 76% 45%
+- Primary brand: 95 45% 35% (verde Centro Orienta, calma y bienestar)
+- Success (cita confirmada): 95 35% 70% (verde logo)
 - Warning (pendiente): 38 92% 50%
 - Error (conflicto): 0 84% 60%
 - Text primario: 210 20% 98%
@@ -32,7 +34,7 @@
 - Background secundario: 220 14% 96%
 - Background terciario: 220 13% 91%
 - Bordes: 220 13% 85%
-- Primary: 210 100% 50%
+- Primary: 95 45% 35% (verde Centro Orienta)
 - Text primario: 220 18% 12%
 - Text secundario: 220 10% 40%
 

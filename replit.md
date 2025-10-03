@@ -10,6 +10,14 @@ This is a comprehensive scheduling management system designed for a psychology c
 
 ## Recent Changes
 
+**October 3, 2025** - Branding Update & Feature Implementation
+
+**Branding Actualización:**
+- Integrado logo oficial de Centro Orienta en sidebar
+- Adaptada paleta de colores al verde corporativo (#B7CD95)
+- Colores primary actualizados: 95 45% 35% (cumple WCAG AA)
+- Tipografía mantenida: Inter (profesional y moderna)
+
 **October 3, 2025** - Complete Feature Set Implementation
 - **Schedule Management Improvements**:
   - Fixed TherapistScheduleDialog to display Monday as first day of week (with DB conversion)
