@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiRequest } from "./lib/queryClient";
 import Dashboard from "@/pages/Dashboard";
 import Therapists from "@/pages/Therapists";
+import TherapistDetail from "@/pages/TherapistDetail";
 import Clients from "@/pages/Clients";
 import ClientDetail from "@/pages/ClientDetail";
 import Calendar from "@/pages/Calendar";
@@ -77,6 +78,7 @@ function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
         <>
           <Route path="/" component={Dashboard} />
           <Route path="/therapists" component={Therapists} />
+          <Route path="/therapists/:id" component={TherapistDetail} />
           <Route path="/clients" component={Clients} />
           <Route path="/clients/:id" component={ClientDetail} />
           <Route path="/calendar" component={Calendar} />

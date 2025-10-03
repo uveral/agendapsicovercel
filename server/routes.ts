@@ -4,6 +4,9 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
 import { z } from "zod";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import type { Therapist, Appointment, User } from "@shared/schema";
 
 const canManageAppointment = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -523,6 +526,279 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error changing series frequency:", error);
       res.status(500).json({ message: "Failed to change series frequency" });
+    }
+  });
+
+  // PDF generation helper functions
+  function formatDate(date: Date | string): string {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+
+  function formatMonth(month: string): string {
+    const [year, monthNum] = month.split('-');
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return `${monthNames[parseInt(monthNum) - 1]} ${year}`;
+  }
+
+  function generateTherapistMonthlyPDF(
+    therapist: Therapist,
+    appointments: Appointment[],
+    clients: Map<string, User>,
+    month: string
+  ): Buffer {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.setTextColor(183, 205, 149);
+    doc.text('Centro Orienta', 15, 20);
+    
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Reporte Mensual - ${therapist.name}`, 15, 35);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Período: ${formatMonth(month)}`, 15, 45);
+    
+    autoTable(doc, {
+      startY: 55,
+      head: [['Fecha', 'Hora', 'Cliente', 'Estado']],
+      body: appointments.map(apt => [
+        formatDate(apt.date),
+        `${apt.startTime} - ${apt.endTime}`,
+        clients.get(apt.clientId)?.firstName + ' ' + clients.get(apt.clientId)?.lastName || 'N/A',
+        apt.status === 'confirmed' ? 'Confirmada' : apt.status === 'pending' ? 'Pendiente' : 'Cancelada'
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [183, 205, 149] },
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY || 55;
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total de citas: ${appointments.length}`, 15, finalY + 10);
+    
+    return Buffer.from(doc.output('arraybuffer'));
+  }
+
+  function generateMonthlyPDF(
+    appointments: Appointment[],
+    therapists: Map<string, Therapist>,
+    clients: Map<string, User>,
+    month: string
+  ): Buffer {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.setTextColor(183, 205, 149);
+    doc.text('Centro Orienta', 15, 20);
+    
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Reporte Mensual - Todos los Terapeutas', 15, 35);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Período: ${formatMonth(month)}`, 15, 45);
+    
+    autoTable(doc, {
+      startY: 55,
+      head: [['Fecha', 'Hora', 'Terapeuta', 'Cliente', 'Estado']],
+      body: appointments.map(apt => [
+        formatDate(apt.date),
+        `${apt.startTime} - ${apt.endTime}`,
+        therapists.get(apt.therapistId)?.name || 'N/A',
+        clients.get(apt.clientId)?.firstName + ' ' + clients.get(apt.clientId)?.lastName || 'N/A',
+        apt.status === 'confirmed' ? 'Confirmada' : apt.status === 'pending' ? 'Pendiente' : 'Cancelada'
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [183, 205, 149] },
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY || 55;
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total de citas: ${appointments.length}`, 15, finalY + 10);
+    
+    return Buffer.from(doc.output('arraybuffer'));
+  }
+
+  function generateDailyPDF(
+    appointments: Appointment[],
+    therapists: Map<string, Therapist>,
+    clients: Map<string, User>,
+    date: string
+  ): Buffer {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.setTextColor(183, 205, 149);
+    doc.text('Centro Orienta', 15, 20);
+    
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Reporte Diario', 15, 35);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Fecha: ${formatDate(date)}`, 15, 45);
+    
+    autoTable(doc, {
+      startY: 55,
+      head: [['Hora', 'Terapeuta', 'Cliente', 'Estado']],
+      body: appointments.map(apt => [
+        `${apt.startTime} - ${apt.endTime}`,
+        therapists.get(apt.therapistId)?.name || 'N/A',
+        clients.get(apt.clientId)?.firstName + ' ' + clients.get(apt.clientId)?.lastName || 'N/A',
+        apt.status === 'confirmed' ? 'Confirmada' : apt.status === 'pending' ? 'Pendiente' : 'Cancelada'
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [183, 205, 149] },
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY || 55;
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total de citas: ${appointments.length}`, 15, finalY + 10);
+    
+    return Buffer.from(doc.output('arraybuffer'));
+  }
+
+  // PDF endpoint: Therapist monthly report
+  app.get('/api/therapists/:therapistId/appointments/pdf', isAuthenticated, async (req: any, res) => {
+    try {
+      const therapistId = req.params.therapistId;
+      const month = req.query.month as string;
+      
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ message: "Invalid month format. Use YYYY-MM" });
+      }
+      
+      const user = await storage.getUser(req.user.claims.sub);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const isAdmin = user.role === 'admin';
+      const isOwningTherapist = user.role === 'therapist' && user.therapistId === therapistId;
+      
+      if (!isAdmin && !isOwningTherapist) {
+        return res.status(403).json({ message: "Not authorized to view this therapist's report" });
+      }
+      
+      const therapist = await storage.getTherapist(therapistId);
+      if (!therapist) {
+        return res.status(404).json({ message: "Therapist not found" });
+      }
+      
+      const [year, monthNum] = month.split('-');
+      const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+      
+      const appointments = await storage.getTherapistAppointments(therapistId, startDate, endDate);
+      
+      const clientIds = Array.from(new Set(appointments.map(apt => apt.clientId)));
+      const clientsArray = await Promise.all(clientIds.map(id => storage.getClient(id)));
+      const clients = new Map<string, User>();
+      clientsArray.forEach(client => {
+        if (client) clients.set(client.id, client);
+      });
+      
+      const pdfBuffer = generateTherapistMonthlyPDF(therapist, appointments, clients, month);
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=reporte_${therapist.name}_${month}.pdf`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating therapist PDF:", error);
+      res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
+  // PDF endpoint: Monthly report (all therapists)
+  app.get('/api/reports/monthly-pdf', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const month = req.query.month as string;
+      
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ message: "Invalid month format. Use YYYY-MM" });
+      }
+      
+      const [year, monthNum] = month.split('-');
+      const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+      
+      const allAppointments = await storage.getAllAppointments();
+      const appointments = allAppointments.filter(apt => {
+        const aptDate = new Date(apt.date);
+        return aptDate >= startDate && aptDate <= endDate;
+      });
+      
+      const therapistsArray = await storage.getAllTherapists();
+      const therapists = new Map<string, Therapist>();
+      therapistsArray.forEach(therapist => therapists.set(therapist.id, therapist));
+      
+      const clientIds = Array.from(new Set(appointments.map(apt => apt.clientId)));
+      const clientsArray = await Promise.all(clientIds.map(id => storage.getClient(id)));
+      const clients = new Map<string, User>();
+      clientsArray.forEach(client => {
+        if (client) clients.set(client.id, client);
+      });
+      
+      const pdfBuffer = generateMonthlyPDF(appointments, therapists, clients, month);
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=reporte_mensual_${month}.pdf`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating monthly PDF:", error);
+      res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
+  // PDF endpoint: Daily report
+  app.get('/api/reports/daily-pdf', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const date = req.query.date as string;
+      
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+      }
+      
+      const targetDate = new Date(date);
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const allAppointments = await storage.getAllAppointments();
+      const appointments = allAppointments.filter(apt => {
+        const aptDate = new Date(apt.date);
+        return aptDate >= startOfDay && aptDate <= endOfDay;
+      });
+      
+      const therapistsArray = await storage.getAllTherapists();
+      const therapists = new Map<string, Therapist>();
+      therapistsArray.forEach(therapist => therapists.set(therapist.id, therapist));
+      
+      const clientIds = Array.from(new Set(appointments.map(apt => apt.clientId)));
+      const clientsArray = await Promise.all(clientIds.map(id => storage.getClient(id)));
+      const clients = new Map<string, User>();
+      clientsArray.forEach(client => {
+        if (client) clients.set(client.id, client);
+      });
+      
+      const pdfBuffer = generateDailyPDF(appointments, therapists, clients, date);
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=reporte_diario_${date}.pdf`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating daily PDF:", error);
+      res.status(500).json({ message: "Failed to generate PDF" });
     }
   });
 

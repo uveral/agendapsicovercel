@@ -2,7 +2,8 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Settings, Trash2 } from "lucide-react";
+import { Calendar, Clock, Settings, Trash2, Eye } from "lucide-react";
+import { useLocation } from "wouter";
 
 interface TherapistCardProps {
   id: string;
@@ -25,6 +26,8 @@ export function TherapistCard({
   onManageSchedule,
   onDelete,
 }: TherapistCardProps) {
+  const [, navigate] = useLocation();
+  
   const initials = name
     .split(" ")
     .map((n) => n[0])
@@ -74,6 +77,15 @@ export function TherapistCard({
         </div>
       </CardContent>
       <CardFooter className="flex flex-col gap-2">
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => navigate(`/therapists/${id}`)}
+          data-testid={`button-view-details-${id}`}
+        >
+          <Eye className="h-4 w-4 mr-2" />
+          Ver detalles
+        </Button>
         <Button
           variant="outline"
           className="w-full"

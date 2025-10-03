@@ -1,14 +1,28 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Users, Clock, AlertCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Calendar, Users, Clock, AlertCircle, Download } from "lucide-react";
 import { AppointmentCard } from "@/components/AppointmentCard";
 import { useQuery } from "@tanstack/react-query";
 import type { Appointment, Therapist, User } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function Dashboard() {
   const { toast } = useToast();
+  
+  const today = new Date();
+  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const currentDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedDate, setSelectedDate] = useState(currentDate);
+
+  const { data: user } = useQuery<User>({
+    queryKey: ['/api/auth/user'],
+  });
 
   const { data: appointments = [], isLoading: loadingAppointments } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
@@ -23,21 +37,21 @@ export default function Dashboard() {
   });
 
   // Get today's appointments
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
+  const todayForAppointments = new Date();
+  todayForAppointments.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(todayForAppointments);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   const todayAppointments = appointments.filter((apt) => {
     const aptDate = new Date(apt.date);
-    return aptDate >= today && aptDate < tomorrow && apt.status !== "cancelled";
+    return aptDate >= todayForAppointments && aptDate < tomorrow && apt.status !== "cancelled";
   });
 
   const confirmedCount = appointments.filter((a) => a.status === "confirmed").length;
   const pendingCount = appointments.filter((a) => a.status === "pending").length;
 
   const upcomingAppointments = [...appointments]
-    .filter((apt) => apt.status !== "cancelled" && new Date(apt.date) >= today)
+    .filter((apt) => apt.status !== "cancelled" && new Date(apt.date) >= todayForAppointments)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 3);
 
@@ -83,6 +97,66 @@ export default function Dashboard() {
     },
   ].filter(Boolean);
 
+  const handleDownloadMonthlyPDF = async () => {
+    try {
+      const response = await fetch(`/api/reports/monthly-pdf?month=${selectedMonth}`);
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Error al generar el PDF");
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte_mensual_${selectedMonth}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "PDF generado",
+        description: "El reporte mensual ha sido descargado correctamente",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo generar el PDF",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDownloadDailyPDF = async () => {
+    try {
+      const response = await fetch(`/api/reports/daily-pdf?date=${selectedDate}`);
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Error al generar el PDF");
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte_diario_${selectedDate}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "PDF generado",
+        description: "El reporte diario ha sido descargado correctamente",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo generar el PDF",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loadingAppointments) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -90,6 +164,8 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <div className="space-y-6">
@@ -152,6 +228,58 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+
+          {isAdmin && (
+            <Card data-testid="card-global-reports">
+              <CardHeader>
+                <CardTitle>Reportes Globales</CardTitle>
+                <CardDescription>Generar reportes de todas las citas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="monthly-report">Reporte Mensual</Label>
+                    <div className="flex gap-3 mt-2">
+                      <Input 
+                        id="monthly-report"
+                        type="month" 
+                        value={selectedMonth} 
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        data-testid="input-monthly-report"
+                      />
+                      <Button 
+                        onClick={handleDownloadMonthlyPDF}
+                        data-testid="button-download-monthly-pdf"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        PDF Mensual
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="daily-report">Reporte Diario</Label>
+                    <div className="flex gap-3 mt-2">
+                      <Input 
+                        id="daily-report"
+                        type="date" 
+                        value={selectedDate} 
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        data-testid="input-daily-report"
+                      />
+                      <Button 
+                        onClick={handleDownloadDailyPDF}
+                        data-testid="button-download-daily-pdf"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        PDF Diario
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
