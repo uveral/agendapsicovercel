@@ -124,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/clients', isAuthenticated, isAdmin, async (req, res) => {
+  app.post('/api/clients', isAuthenticated, async (req, res) => {
     try {
       const data = insertManualClientSchema.parse(req.body);
       const client = await storage.createManualClient(data);
