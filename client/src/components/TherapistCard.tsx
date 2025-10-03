@@ -2,7 +2,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, Settings } from "lucide-react";
 
 interface TherapistCardProps {
   id: string;
@@ -11,6 +11,7 @@ interface TherapistCardProps {
   availability: number;
   upcomingAppointments: number;
   onViewCalendar: (id: string) => void;
+  onManageSchedule?: (id: string) => void;
 }
 
 export function TherapistCard({
@@ -20,6 +21,7 @@ export function TherapistCard({
   availability,
   upcomingAppointments,
   onViewCalendar,
+  onManageSchedule,
 }: TherapistCardProps) {
   const initials = name
     .split(" ")
@@ -59,7 +61,7 @@ export function TherapistCard({
           </span>
         </div>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex flex-col gap-2">
         <Button
           variant="outline"
           className="w-full"
@@ -69,6 +71,17 @@ export function TherapistCard({
           <Calendar className="h-4 w-4 mr-2" />
           Ver calendario
         </Button>
+        {onManageSchedule && (
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => onManageSchedule(id)}
+            data-testid={`button-manage-schedule-${id}`}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Gestionar horario
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Search, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TherapistCard } from "@/components/TherapistCard";
+import { TherapistScheduleDialog } from "@/components/TherapistScheduleDialog";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ export default function Therapists() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [scheduleDialogTherapist, setScheduleDialogTherapist] = useState<{ id: string; name: string } | null>(null);
   const { toast } = useToast();
 
   const form = useForm<InsertTherapist>({
@@ -164,6 +166,12 @@ export default function Therapists() {
             key={therapist.id}
             {...therapist}
             onViewCalendar={(id) => console.log('Ver calendario:', id)}
+            onManageSchedule={(id) => {
+              const therapistData = therapists.find(t => t.id === id);
+              if (therapistData) {
+                setScheduleDialogTherapist({ id: therapistData.id, name: therapistData.name });
+              }
+            }}
           />
         ))}
       </div>
@@ -253,6 +261,19 @@ export default function Therapists() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {scheduleDialogTherapist && (
+        <TherapistScheduleDialog
+          therapistId={scheduleDialogTherapist.id}
+          therapistName={scheduleDialogTherapist.name}
+          open={!!scheduleDialogTherapist}
+          onOpenChange={(open) => {
+            if (!open) {
+              setScheduleDialogTherapist(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
