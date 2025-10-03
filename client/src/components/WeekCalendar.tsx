@@ -1,110 +1,221 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, Fragment } from "react";
-
-interface TimeSlot {
-  id: string;
-  time: string;
-  client?: string;
-  status?: "confirmed" | "pending";
-}
-
-interface DaySchedule {
-  day: string;
-  date: string;
-  slots: TimeSlot[];
-}
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { Appointment, User } from "@shared/schema";
 
 interface WeekCalendarProps {
   therapistName: string;
-  schedule: DaySchedule[];
-  onSlotClick: (slotId: string) => void;
+  therapistId: string;
+  appointments: Appointment[];
+  clients: User[];
+  onAppointmentClick?: (appointmentId: string) => void;
 }
 
-export function WeekCalendar({ therapistName, schedule, onSlotClick }: WeekCalendarProps) {
+export function WeekCalendar({ 
+  therapistName, 
+  therapistId, 
+  appointments, 
+  clients,
+  onAppointmentClick 
+}: WeekCalendarProps) {
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const hours = Array.from({ length: 12 }, (_, i) => `${8 + i}:00`);
+  const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
+  
+  // Calculate the Monday of the current week based on offset
+  const getWeekStart = (offset: number): Date => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = day === 0 ? -6 : 1 - day; // Adjust to Monday
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diff + (offset * 7));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  };
+
+  const weekStart = getWeekStart(weekOffset);
+  
+  // Generate array of 7 days starting from Monday
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + i);
+    return date;
+  });
+
+  const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+  // Navigation functions
+  const goToPreviousWeek = () => {
+    setWeekOffset(weekOffset - 1);
+  };
+
+  const goToNextWeek = () => {
+    setWeekOffset(weekOffset + 1);
+  };
+
+  const goToCurrentWeek = () => {
+    setWeekOffset(0);
+  };
+
+  // Format date as "DD/MM"
+  const formatDate = (date: Date): string => {
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return `${day}/${month}`;
+  };
+
+  // Get week range as string
+  const getWeekRangeString = (): string => {
+    const start = weekDates[0];
+    const end = weekDates[6];
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  };
+
+  // Find appointment for therapist at a specific time
+  const getAppointment = (date: Date, hour: number): Appointment | undefined => {
+    return appointments.find((apt) => {
+      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
+      
+      const aptDate = new Date(apt.date);
+      const isSameDay = aptDate.toDateString() === date.toDateString();
+      
+      if (!isSameDay) return false;
+      
+      // Parse start and end times
+      const [startHour] = apt.startTime.split(':').map(Number);
+      const [endHour] = apt.endTime.split(':').map(Number);
+      
+      return hour >= startHour && hour < endHour;
+    });
+  };
+
+  // Get client name from appointment
+  const getClientName = (appointment: Appointment): string => {
+    const client = clients.find((c) => c.id === appointment.clientId);
+    if (!client) return 'Cliente';
+    return `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
+  };
+
+  // Check if a date is today
+  const isToday = (date: Date): boolean => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-xl">{therapistName}</CardTitle>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <CardTitle className="text-lg">{therapistName}</CardTitle>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setWeekOffset((prev) => prev - 1)}
+              onClick={goToPreviousWeek}
               data-testid="button-prev-week"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm text-muted-foreground min-w-[100px] text-center">
-              Semana {weekOffset === 0 ? "actual" : weekOffset > 0 ? `+${weekOffset}` : weekOffset}
-            </span>
+            <div className="text-sm font-medium min-w-[180px] text-center">
+              {getWeekRangeString()}
+            </div>
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setWeekOffset((prev) => prev + 1)}
+              onClick={goToNextWeek}
               data-testid="button-next-week"
             >
               <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={goToCurrentWeek}
+              data-testid="button-current-week"
+              className="ml-2"
+            >
+              Hoy
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <div className="grid grid-cols-8 gap-2 min-w-[700px]">
-            <div className="text-xs font-medium text-muted-foreground uppercase p-2">
-              Hora
-            </div>
-            {schedule.map((day) => (
-              <div key={day.day} className="text-center p-2">
-                <div className="text-xs font-medium uppercase">{day.day}</div>
-                <div className="text-xs text-muted-foreground">{day.date}</div>
+          <div className="inline-block min-w-full">
+            <div 
+              className="grid gap-1"
+              style={{
+                gridTemplateColumns: `auto repeat(7, minmax(100px, 1fr))`
+              }}
+            >
+              {/* Header row */}
+              <div className="text-xs font-medium text-muted-foreground uppercase p-2 sticky left-0 bg-card z-10">
+                Hora
               </div>
-            ))}
-            
-            {hours.map((hour) => (
-              <Fragment key={hour}>
-                <div className="text-xs text-muted-foreground p-2 flex items-center">
-                  {hour}
-                </div>
-                {schedule.map((day) => {
-                  const slot = day.slots.find((s) => s.time === hour);
-                  return (
-                    <button
-                      key={`${day.day}-${hour}`}
-                      onClick={() => slot && onSlotClick(slot.id)}
-                      className={`p-2 rounded-md text-xs min-h-[60px] border transition-colors ${
-                        slot?.client
-                          ? slot.status === "confirmed"
-                            ? "bg-chart-1/10 border-chart-1/30 hover-elevate"
-                            : "bg-chart-3/10 border-chart-3/30 hover-elevate"
-                          : "bg-card border-border hover-elevate"
-                      }`}
-                      data-testid={`slot-${day.day}-${hour.replace(":", "")}`}
-                    >
-                      {slot?.client && (
-                        <div className="space-y-1">
-                          <div className="font-medium truncate">{slot.client}</div>
-                          <Badge
-                            variant={slot.status === "confirmed" ? "default" : "secondary"}
-                            className="text-[10px] px-1 py-0"
-                          >
-                            {slot.status === "confirmed" ? "Conf" : "Pend"}
-                          </Badge>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </Fragment>
-            ))}
+              {weekDates.map((date, i) => {
+                const today = isToday(date);
+                return (
+                  <div 
+                    key={`header-${i}`} 
+                    className="text-center p-2"
+                  >
+                    <div className={`text-sm font-medium ${today ? 'text-primary' : ''}`}>
+                      {dayNames[i]}
+                    </div>
+                    <div className={`text-xs ${today ? 'text-primary' : 'text-muted-foreground'}`}>
+                      {formatDate(date)}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Time rows */}
+              {hours.map((hour) => (
+                <>
+                  <div 
+                    key={`hour-${hour}`} 
+                    className="text-xs text-muted-foreground p-2 flex items-center sticky left-0 bg-card z-10"
+                  >
+                    {hour}:00
+                  </div>
+                  {weekDates.map((date, dayIndex) => {
+                    const appointment = getAppointment(date, hour);
+                    const hasAppointment = !!appointment;
+                    
+                    return (
+                      <button
+                        key={`${hour}-${dayIndex}`}
+                        className={`p-2 border border-border rounded-sm text-xs min-h-[80px] transition-colors ${
+                          hasAppointment
+                            ? appointment.status === "confirmed"
+                              ? "bg-chart-1/10 border-chart-1/30 hover-elevate cursor-pointer"
+                              : "bg-chart-3/10 border-chart-3/30 hover-elevate cursor-pointer"
+                            : "bg-card hover-elevate"
+                        }`}
+                        onClick={() => {
+                          if (appointment && onAppointmentClick) {
+                            onAppointmentClick(appointment.id);
+                          }
+                        }}
+                        data-testid={`slot-${dayNames[dayIndex]}-${hour}`}
+                      >
+                        {hasAppointment && (
+                          <div className="space-y-1 flex flex-col items-start">
+                            <div className="font-medium text-sm truncate w-full">
+                              {getClientName(appointment)}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {appointment.startTime} - {appointment.endTime}
+                            </div>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </>
+              ))}
+            </div>
           </div>
         </div>
       </CardContent>

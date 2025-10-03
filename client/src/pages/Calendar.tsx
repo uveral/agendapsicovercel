@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { MonthCalendar } from "@/components/MonthCalendar";
+import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { Therapist, Appointment, User } from "@shared/schema";
 
@@ -49,6 +51,7 @@ export default function Calendar() {
   const [viewType, setViewType] = useState<"general" | "individual">(
     therapistParam || (user?.role === "therapist" && user?.therapistId) ? "individual" : "general"
   );
+  const [calendarView, setCalendarView] = useState<"monthly" | "weekly">("monthly");
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
 
   // Update selected therapist when user or therapists data loads
@@ -141,14 +144,45 @@ export default function Calendar() {
         </TabsContent>
 
         <TabsContent value="individual" className="space-y-6 mt-6">
+          {selectedTherapist !== "all" && (
+            <div className="flex justify-center gap-2 mb-4">
+              <Button
+                variant={calendarView === "monthly" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCalendarView("monthly")}
+                data-testid="button-view-monthly"
+              >
+                Vista Mensual
+              </Button>
+              <Button
+                variant={calendarView === "weekly" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCalendarView("weekly")}
+                data-testid="button-view-weekly"
+              >
+                Vista Semanal
+              </Button>
+            </div>
+          )}
+
           {selectedTherapist !== "all" ? (
-            <MonthCalendar
-              therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
-              therapistId={selectedTherapist}
-              appointments={appointments}
-              clients={clients}
-              onAppointmentClick={(id) => setEditingAppointmentId(id)}
-            />
+            calendarView === "monthly" ? (
+              <MonthCalendar
+                therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
+                therapistId={selectedTherapist}
+                appointments={appointments}
+                clients={clients}
+                onAppointmentClick={(id) => setEditingAppointmentId(id)}
+              />
+            ) : (
+              <WeekCalendar
+                therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
+                therapistId={selectedTherapist}
+                appointments={appointments}
+                clients={clients}
+                onAppointmentClick={(id) => setEditingAppointmentId(id)}
+              />
+            )
           ) : (
             <div className="space-y-6">
               {therapists.map((therapist) => (
