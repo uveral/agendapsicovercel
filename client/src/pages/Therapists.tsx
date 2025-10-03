@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Search, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Therapist, Appointment } from "@shared/schema";
 
 export default function Therapists() {
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -197,7 +199,7 @@ export default function Therapists() {
           <TherapistCard
             key={therapist.id}
             {...therapist}
-            onViewCalendar={(id) => console.log('Ver calendario:', id)}
+            onViewCalendar={(id) => setLocation(`/calendar?therapist=${id}`)}
             onManageSchedule={(id) => {
               const therapistData = therapists.find(t => t.id === id);
               if (therapistData) {
