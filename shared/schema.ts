@@ -134,6 +134,8 @@ export const appointments = pgTable("appointments", {
   seriesId: varchar("series_id"),
   frequency: varchar("frequency", { enum: ["puntual", "semanal", "quincenal"] }).notNull().default("puntual"),
   durationMinutes: integer("duration_minutes").notNull().default(60),
+  pendingReason: text("pending_reason"),
+  optimizationScore: integer("optimization_score"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
