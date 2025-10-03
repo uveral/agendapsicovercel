@@ -57,13 +57,38 @@ function updateUserSession(
 async function upsertUser(
   claims: any,
 ) {
-  await storage.upsertUser({
-    id: claims["sub"],
-    email: claims["email"],
-    firstName: claims["first_name"],
-    lastName: claims["last_name"],
-    profileImageUrl: claims["profile_image_url"],
-  });
+  // Check if user already exists
+  const existingUser = await storage.getUser(claims["sub"]);
+  
+  if (existingUser) {
+    // User exists - preserve their existing role
+    console.log(`[Auth] Updating existing user ${claims["sub"]} with role: ${existingUser.role}`);
+    
+    await storage.upsertUser({
+      id: claims["sub"],
+      email: claims["email"],
+      firstName: claims["first_name"],
+      lastName: claims["last_name"],
+      profileImageUrl: claims["profile_image_url"],
+      role: existingUser.role,
+    });
+  } else {
+    // New user - check if this is the first user (make them admin)
+    const allUsers = await storage.getAllUsers();
+    const isFirstUser = allUsers.length === 0;
+    const role = isFirstUser ? "admin" : "client";
+    
+    console.log(`[Auth] Creating new user ${claims["sub"]}, isFirstUser: ${isFirstUser}, total users: ${allUsers.length}, role: ${role}`);
+    
+    await storage.upsertUser({
+      id: claims["sub"],
+      email: claims["email"],
+      firstName: claims["first_name"],
+      lastName: claims["last_name"],
+      profileImageUrl: claims["profile_image_url"],
+      role,
+    });
+  }
 }
 
 export async function setupAuth(app: Express) {
@@ -160,10 +185,12 @@ export const isAdmin: RequestHandler = async (req, res, next) => {
   const userId = (req.user as any)?.claims?.sub;
   
   if (!userId) {
+    console.log('[Auth] isAdmin check failed: no userId in claims');
     return res.status(401).json({ message: "Unauthorized" });
   }
 
   const user = await storage.getUser(userId);
+  console.log(`[Auth] isAdmin check for user ${userId}: ${JSON.stringify({ found: !!user, role: user?.role })}`);
   
   if (!user || user.role !== "admin") {
     return res.status(403).json({ message: "Forbidden: Admin access required" });

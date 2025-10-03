@@ -10,12 +10,66 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertTherapistSchema, type InsertTherapist } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Therapist, Appointment } from "@shared/schema";
 
 export default function Therapists() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("all");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
+
+  const form = useForm<InsertTherapist>({
+    resolver: zodResolver(insertTherapistSchema),
+    defaultValues: {
+      name: "",
+      specialty: "",
+      email: "",
+      phone: "",
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertTherapist) => {
+      return await apiRequest("POST", "/api/therapists", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+      setIsDialogOpen(false);
+      form.reset();
+      toast({
+        title: "Terapeuta creado",
+        description: "El terapeuta ha sido agregado exitosamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear el terapeuta",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: therapists = [], isLoading } = useQuery<Therapist[]>({
     queryKey: ["/api/therapists"],
@@ -72,7 +126,7 @@ export default function Therapists() {
             Gestiona los {therapists.length} terapeutas del centro
           </p>
         </div>
-        <Button data-testid="button-add-therapist" onClick={() => console.log('Add therapist')}>
+        <Button data-testid="button-add-therapist" onClick={() => setIsDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nuevo terapeuta
         </Button>
@@ -119,6 +173,86 @@ export default function Therapists() {
           No se encontraron terapeutas
         </div>
       )}
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent data-testid="dialog-create-therapist">
+          <DialogHeader>
+            <DialogTitle>Nuevo Terapeuta</DialogTitle>
+            <DialogDescription>
+              Agrega un nuevo terapeuta al centro
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl>
+                      <Input {...field} data-testid="input-name" placeholder="Dr. Juan Pérez" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="specialty"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Especialidad</FormLabel>
+                    <FormControl>
+                      <Input {...field} data-testid="input-specialty" placeholder="Psicología Clínica" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} data-testid="input-email" type="email" placeholder="juan@example.com" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} data-testid="input-phone" placeholder="+34 600 000 000" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                  data-testid="button-cancel"
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit">
+                  {createMutation.isPending ? "Guardando..." : "Guardar"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
