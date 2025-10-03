@@ -3,12 +3,66 @@ import { Input } from "@/components/ui/input";
 import { Search, Plus, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ClientCard } from "@/components/ClientCard";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertManualClientSchema, type InsertManualClient } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import type { User, Appointment, ClientAvailability } from "@shared/schema";
 
 export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyWithAvailability, setShowOnlyWithAvailability] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
+
+  const form = useForm<InsertManualClient>({
+    resolver: zodResolver(insertManualClientSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertManualClient) => {
+      return await apiRequest("POST", "/api/clients", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      setIsDialogOpen(false);
+      form.reset();
+      toast({
+        title: "Cliente creado",
+        description: "El cliente ha sido agregado exitosamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear el cliente",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: clients = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/clients"],
@@ -77,7 +131,7 @@ export default function Clients() {
             {clients.length} clientes registrados · {clientsWithAvailability} con citas
           </p>
         </div>
-        <Button data-testid="button-add-client" onClick={() => console.log('Add client')}>
+        <Button data-testid="button-add-client" onClick={() => setIsDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nuevo cliente
         </Button>
@@ -124,6 +178,86 @@ export default function Clients() {
           No se encontraron clientes
         </div>
       )}
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent data-testid="dialog-create-client">
+          <DialogHeader>
+            <DialogTitle>Nuevo Cliente</DialogTitle>
+            <DialogDescription>
+              Agrega un nuevo cliente al sistema
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl>
+                      <Input {...field} data-testid="input-firstName" placeholder="Juan" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Apellido</FormLabel>
+                    <FormControl>
+                      <Input {...field} data-testid="input-lastName" placeholder="Pérez" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (opcional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} data-testid="input-email" type="email" placeholder="juan@example.com" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono (opcional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} data-testid="input-phone" placeholder="+34 600 000 000" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                  data-testid="button-cancel"
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit">
+                  {createMutation.isPending ? "Creando..." : "Crear"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
