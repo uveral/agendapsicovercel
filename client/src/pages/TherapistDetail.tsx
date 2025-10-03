@@ -49,6 +49,8 @@ export default function TherapistDetail() {
     queryKey: ['/api/clients'],
   });
 
+  const canEdit = user?.role === 'admin' || therapist?.id === user?.therapistId;
+
   const updateTherapistMutation = useMutation({
     mutationFn: async (data: { email?: string; specialty?: string; color?: string }) => {
       return await apiRequest("PATCH", `/api/therapists/${id}`, data);
@@ -182,7 +184,7 @@ export default function TherapistDetail() {
         <Card data-testid="card-therapist-info">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
             <CardTitle>Información del Terapeuta</CardTitle>
-            {user?.role === 'admin' && (
+            {canEdit && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -220,7 +222,7 @@ export default function TherapistDetail() {
         <Card data-testid="card-working-hours">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
             <CardTitle>Horario Laboral</CardTitle>
-            {user?.role === 'admin' && (
+            {canEdit && (
               <Button
                 variant="ghost"
                 size="icon"
