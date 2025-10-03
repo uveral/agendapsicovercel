@@ -30,7 +30,8 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  role: varchar("role", { enum: ["admin", "client"] }).notNull().default("client"),
+  therapistId: varchar("therapist_id").references(() => therapists.id, { onDelete: "set null" }),
+  role: varchar("role", { enum: ["admin", "therapist", "client"] }).notNull().default("client"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

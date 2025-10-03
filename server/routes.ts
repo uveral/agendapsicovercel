@@ -1,9 +1,52 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
 import { z } from "zod";
+
+const canManageAppointment = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const user = await storage.getUser(req.user.claims.sub);
+    
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    
+    if (user.role === 'admin') {
+      return next();
+    }
+    
+    if (user.role === 'therapist') {
+      if (!user.therapistId) {
+        return res.status(403).json({ message: "Therapist account not properly configured" });
+      }
+      
+      const appointmentId = req.params.id;
+      if (appointmentId) {
+        const appointment = await storage.getAppointment(appointmentId);
+        if (!appointment) {
+          return res.status(404).json({ message: "Appointment not found" });
+        }
+        
+        if (appointment.therapistId !== user.therapistId) {
+          return res.status(403).json({ message: "Not authorized to manage this appointment" });
+        }
+      } else if (req.method === 'POST' && req.body.therapistId) {
+        if (req.body.therapistId !== user.therapistId) {
+          return res.status(403).json({ message: "Not authorized to create appointments for other therapists" });
+        }
+      }
+      
+      return next();
+    }
+    
+    return res.status(403).json({ message: "Not authorized to manage appointments" });
+  } catch (error) {
+    console.error("Error in canManageAppointment middleware:", error);
+    res.status(500).json({ message: "Failed to verify permissions" });
+  }
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
@@ -32,8 +75,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { role } = req.body;
       
-      if (!role || (role !== 'admin' && role !== 'client')) {
-        return res.status(400).json({ message: "Invalid role. Must be 'admin' or 'client'" });
+      if (!role || (role !== 'admin' && role !== 'therapist' && role !== 'client')) {
+        return res.status(400).json({ message: "Invalid role. Must be 'admin', 'therapist', or 'client'" });
       }
       
       const updatedUser = await storage.updateUser(userId, { role });
@@ -248,26 +291,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/appointments', isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.claims.sub);
+      let appointments;
       
       if (user?.role === 'admin') {
-        const appointments = await storage.getAllAppointments();
-        res.json(appointments);
+        // Admins see all appointments
+        appointments = await storage.getAllAppointments();
+      } else if (user?.role === 'therapist') {
+        if (!user.therapistId) {
+          return res.status(403).json({ message: 'Therapist account not linked to therapist record' });
+        }
+        // Therapists see their own appointments
+        appointments = await storage.getTherapistAppointments(user.therapistId);
       } else {
-        const appointments = await storage.getClientAppointments(req.user.claims.sub);
-        res.json(appointments);
+        // Clients see their own appointments
+        appointments = await storage.getClientAppointments(req.user.claims.sub);
       }
+      
+      res.json(appointments);
     } catch (error) {
       console.error("Error fetching appointments:", error);
       res.status(500).json({ message: "Failed to fetch appointments" });
     }
   });
 
-  app.get('/api/appointments/:id', isAuthenticated, async (req, res) => {
+  app.get('/api/appointments/:id', isAuthenticated, async (req: any, res) => {
     try {
       const appointment = await storage.getAppointment(req.params.id);
       if (!appointment) {
         return res.status(404).json({ message: "Appointment not found" });
       }
+      
+      // Get the user to check authorization
+      const user = await storage.getUser(req.user.claims.sub);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Authorization check
+      const isAdmin = user.role === 'admin';
+      const isOwningTherapist = user.role === 'therapist' && user.therapistId === appointment.therapistId;
+      const isOwningClient = user.role === 'client' && user.id === appointment.clientId;
+      
+      if (!isAdmin && !isOwningTherapist && !isOwningClient) {
+        return res.status(403).json({ message: "Not authorized to view this appointment" });
+      }
+      
       res.json(appointment);
     } catch (error) {
       console.error("Error fetching appointment:", error);
@@ -275,21 +344,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/therapists/:id/appointments', isAuthenticated, async (req, res) => {
+  app.get('/api/therapists/:id/appointments', isAuthenticated, async (req: any, res) => {
     try {
+      const therapistId = req.params.id;
+      
+      // Get the user to check authorization
+      const user = await storage.getUser(req.user.claims.sub);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Authorization check
+      const isAdmin = user.role === 'admin';
+      const isOwningTherapist = user.role === 'therapist' && user.therapistId === therapistId;
+      
+      if (!isAdmin && !isOwningTherapist) {
+        return res.status(403).json({ message: "Not authorized to view this therapist's appointments" });
+      }
+      
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
       const end = endDate ? new Date(endDate as string) : undefined;
       
-      const appointments = await storage.getTherapistAppointments(req.params.id, start, end);
+      const appointments = await storage.getTherapistAppointments(therapistId, start, end);
       res.json(appointments);
     } catch (error) {
       console.error("Error fetching therapist appointments:", error);
-      res.status(500).json({ message: "Failed to fetch appointments" });
+      res.status(500).json({ message: "Failed to fetch therapist appointments" });
     }
   });
 
-  app.post('/api/appointments', isAuthenticated, async (req, res) => {
+  app.post('/api/appointments', isAuthenticated, canManageAppointment, async (req, res) => {
     try {
       const data = insertAppointmentSchema.parse(req.body);
       const appointment = await storage.createAppointment(data);
@@ -303,9 +389,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/appointments/:id', isAuthenticated, isAdmin, async (req, res) => {
+  app.patch('/api/appointments/:id', isAuthenticated, canManageAppointment, async (req: any, res) => {
     try {
-      const appointment = await storage.updateAppointment(req.params.id, req.body);
+      const user = await storage.getUser(req.user.claims.sub);
+      const body = { ...req.body };
+      
+      // Prevent therapists from reassigning appointments
+      if (user?.role === 'therapist') {
+        delete body.therapistId;
+      }
+      
+      const appointment = await storage.updateAppointment(req.params.id, body);
       res.json(appointment);
     } catch (error) {
       console.error("Error updating appointment:", error);
@@ -313,7 +407,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/appointments/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/appointments/:id', isAuthenticated, canManageAppointment, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      const body = { ...req.body };
+      
+      // Prevent therapists from reassigning appointments
+      if (user?.role === 'therapist') {
+        delete body.therapistId;
+      }
+      
+      const appointment = await storage.updateAppointment(req.params.id, body);
+      res.json(appointment);
+    } catch (error) {
+      console.error("Error updating appointment:", error);
+      res.status(500).json({ message: "Failed to update appointment" });
+    }
+  });
+
+  app.delete('/api/appointments/:id', isAuthenticated, canManageAppointment, async (req, res) => {
     try {
       await storage.deleteAppointment(req.params.id);
       res.status(204).send();
