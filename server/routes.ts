@@ -150,6 +150,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/clients/:id', isAuthenticated, async (req, res) => {
+    try {
+      const client = await storage.getClient(req.params.id);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      res.json(client);
+    } catch (error) {
+      console.error("Error fetching client:", error);
+      res.status(500).json({ message: "Failed to fetch client" });
+    }
+  });
+
   app.post('/api/clients', isAuthenticated, async (req, res) => {
     try {
       const data = insertManualClientSchema.parse(req.body);

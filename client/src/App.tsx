@@ -14,6 +14,7 @@ import { apiRequest } from "./lib/queryClient";
 import Dashboard from "@/pages/Dashboard";
 import Therapists from "@/pages/Therapists";
 import Clients from "@/pages/Clients";
+import ClientDetail from "@/pages/ClientDetail";
 import Calendar from "@/pages/Calendar";
 import Appointments from "@/pages/Appointments";
 import Availability from "@/pages/Availability";
@@ -77,6 +78,7 @@ function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
           <Route path="/" component={Dashboard} />
           <Route path="/therapists" component={Therapists} />
           <Route path="/clients" component={Clients} />
+          <Route path="/clients/:id" component={ClientDetail} />
           <Route path="/calendar" component={Calendar} />
           <Route path="/appointments" component={Appointments} />
           <Route path="/availability" component={Availability} />

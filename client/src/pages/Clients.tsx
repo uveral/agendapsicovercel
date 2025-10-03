@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Search, Plus, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ import {
 import type { User, Appointment, ClientAvailability } from "@shared/schema";
 
 export default function Clients() {
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyWithAvailability, setShowOnlyWithAvailability] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -200,7 +202,7 @@ export default function Clients() {
             phone="+34 XXX XXX XXX"
             hasAvailability={client.hasAvailability}
             nextAppointment={client.nextAppointment}
-            onViewDetails={(id) => console.log('Ver detalles:', id)}
+            onViewDetails={(id) => setLocation(`/clients/${id}`)}
             onDelete={(id) => {
               const clientData = clients.find(c => c.id === id);
               if (clientData) {

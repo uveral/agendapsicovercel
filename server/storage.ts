@@ -49,6 +49,7 @@ export interface IStorage {
   
   // Client operations
   getAllClients(): Promise<User[]>;
+  getClient(id: string): Promise<User | undefined>;
   createManualClient(client: InsertManualClient): Promise<User>;
   deleteClient(id: string): Promise<void>;
   
@@ -186,6 +187,11 @@ export class DatabaseStorage implements IStorage {
   // Client operations
   async getAllClients(): Promise<User[]> {
     return await db.select().from(users).where(eq(users.role, "client")).orderBy(asc(users.firstName));
+  }
+
+  async getClient(id: string): Promise<User | undefined> {
+    const [client] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return client;
   }
 
   async createManualClient(clientData: InsertManualClient): Promise<User> {
