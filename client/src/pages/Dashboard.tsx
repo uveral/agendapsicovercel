@@ -50,10 +50,16 @@ export default function Dashboard() {
   const confirmedCount = appointments.filter((a) => a.status === "confirmed").length;
   const pendingCount = appointments.filter((a) => a.status === "pending").length;
 
-  const upcomingAppointments = [...appointments]
-    .filter((apt) => apt.status !== "cancelled" && new Date(apt.date) >= todayForAppointments)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 3);
+  const upcomingAppointments = user?.role === 'therapist' && user?.therapistId
+    ? [...appointments]
+        .filter((apt) => 
+          apt.status !== "cancelled" && 
+          new Date(apt.date) >= todayForAppointments &&
+          apt.therapistId === user.therapistId
+        )
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 6)
+    : [];
 
   const stats = [
     {
@@ -166,6 +172,7 @@ export default function Dashboard() {
   }
 
   const isAdmin = user?.role === 'admin';
+  const isTherapist = user?.role === 'therapist' && user?.therapistId;
 
   return (
     <div className="space-y-6">
@@ -199,35 +206,37 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Próximas Citas</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {upcomingAppointments.length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">
-                  No hay citas próximas
-                </p>
-              ) : (
-                upcomingAppointments.map((apt) => {
-                  const therapist = therapists.find((t) => t.id === apt.therapistId);
-                  const client = clients.find((c) => c.id === apt.clientId);
-                  return (
-                    <AppointmentCard
-                      key={apt.id}
-                      id={apt.id}
-                      time={`${apt.startTime} - ${apt.endTime}`}
-                      clientName={client ? `${client.firstName} ${client.lastName}` : "Cliente desconocido"}
-                      therapistName={therapist?.name || "Terapeuta desconocido"}
-                      status={apt.status as "confirmed" | "pending" | "cancelled"}
-                      onEdit={(id) => console.log('Editar:', id)}
-                      onCancel={(id) => console.log('Cancelar:', id)}
-                    />
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
+          {isTherapist && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Mis Próximas Citas</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {upcomingAppointments.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">
+                    No hay citas próximas
+                  </p>
+                ) : (
+                  upcomingAppointments.map((apt) => {
+                    const therapist = therapists.find((t) => t.id === apt.therapistId);
+                    const client = clients.find((c) => c.id === apt.clientId);
+                    return (
+                      <AppointmentCard
+                        key={apt.id}
+                        id={apt.id}
+                        time={`${apt.startTime} - ${apt.endTime}`}
+                        clientName={client ? `${client.firstName} ${client.lastName}` : "Cliente desconocido"}
+                        therapistName={therapist?.name || "Terapeuta desconocido"}
+                        status={apt.status as "confirmed" | "pending" | "cancelled"}
+                        onEdit={(id) => console.log('Editar:', id)}
+                        onCancel={(id) => console.log('Cancelar:', id)}
+                      />
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {isAdmin && (
             <Card data-testid="card-global-reports">
