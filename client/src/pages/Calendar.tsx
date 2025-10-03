@@ -4,6 +4,7 @@ import { MonthCalendar } from "@/components/MonthCalendar";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
+import { AvailabilitySummary } from "@/components/AvailabilitySummary";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -142,6 +143,18 @@ export default function Calendar() {
             appointments={appointments}
             onAppointmentClick={(id) => setEditingAppointmentId(id)}
           />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {therapists.map((therapist) => (
+              <AvailabilitySummary
+                key={therapist.id}
+                therapistId={therapist.id}
+                therapistName={therapist.name}
+                appointments={appointments}
+                showTherapistName={true}
+              />
+            ))}
+          </div>
         </TabsContent>
 
         <TabsContent value="individual" className="space-y-6 mt-6">
@@ -167,23 +180,31 @@ export default function Calendar() {
           )}
 
           {selectedTherapist !== "all" ? (
-            calendarView === "monthly" ? (
-              <TherapistMonthView
-                therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
+            <div className="space-y-4">
+              {calendarView === "monthly" ? (
+                <TherapistMonthView
+                  therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
+                  therapistId={selectedTherapist}
+                  appointments={appointments}
+                  clients={clients}
+                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                />
+              ) : (
+                <WeekCalendar
+                  therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
+                  therapistId={selectedTherapist}
+                  appointments={appointments}
+                  clients={clients}
+                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                />
+              )}
+              
+              <AvailabilitySummary
                 therapistId={selectedTherapist}
                 appointments={appointments}
-                clients={clients}
-                onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                showTherapistName={false}
               />
-            ) : (
-              <WeekCalendar
-                therapistName={therapistsList.find((t) => t.id === selectedTherapist)?.name || ""}
-                therapistId={selectedTherapist}
-                appointments={appointments}
-                clients={clients}
-                onAppointmentClick={(id) => setEditingAppointmentId(id)}
-              />
-            )
+            </div>
           ) : (
             <div className="space-y-6">
               {therapists.map((therapist) => (

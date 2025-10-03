@@ -201,7 +201,7 @@ export function TherapistMonthView({
                       </span>
                     </div>
 
-                    <div className="space-y-1.5 overflow-y-auto" style={{ maxHeight: '140px' }}>
+                    <div className="space-y-1 overflow-y-auto" style={{ maxHeight: '140px' }}>
                       {dayAppointments.map((apt) => {
                         const isSpecial = apt.notes?.toLowerCase().includes('viaje') || 
                                         apt.notes?.toLowerCase().includes('importante');
@@ -210,16 +210,13 @@ export function TherapistMonthView({
                           <button
                             key={apt.id}
                             onClick={() => onAppointmentClick?.(apt.id)}
-                            className={`w-full text-left text-sm px-2 py-1 rounded hover-elevate transition-colors ${
-                              isSpecial ? 'text-destructive font-medium' : 'text-foreground'
+                            className={`w-full text-left text-xs px-1.5 py-0.5 rounded hover-elevate transition-colors ${
+                              isSpecial ? 'text-destructive' : 'text-foreground'
                             }`}
                             data-testid={`appointment-${apt.id}`}
                           >
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-start gap-1">
                               <span className="font-medium">{apt.startTime}</span>
-                              <span className="text-muted-foreground">-</span>
-                              <span className="font-medium">{apt.endTime}</span>
-                              <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                               <span className="truncate">{getClientName(apt)}</span>
                             </div>
                           </button>
