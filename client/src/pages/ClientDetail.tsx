@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import ClientAvailabilityMatrix from "@/components/ClientAvailabilityMatrix";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
+import ClientEditDialog from "@/components/ClientEditDialog";
 
 export default function ClientDetail() {
   const params = useParams();
@@ -17,6 +18,7 @@ export default function ClientDetail() {
   const clientId = params.id;
   const [showEditAvailability, setShowEditAvailability] = useState(false);
   const [showCreateAppointment, setShowCreateAppointment] = useState(false);
+  const [showEditClient, setShowEditClient] = useState(false);
 
   const { data: client, isLoading: clientLoading, error: clientError } = useQuery<UserType>({
     queryKey: [`/api/clients/${clientId}`],
@@ -107,12 +109,23 @@ export default function ClientDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card data-testid="card-personal-info">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Información Personal
-            </CardTitle>
-            <CardDescription>Datos del cliente</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2 space-y-0 pb-2">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Información Personal
+              </CardTitle>
+              <CardDescription>Datos del cliente</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowEditClient(true)}
+              data-testid="button-edit-client"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Editar
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -124,7 +137,7 @@ export default function ClientDetail() {
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Teléfono:</span>
-                <span data-testid="text-phone">No disponible</span>
+                <span data-testid="text-phone">{client.phone || 'No disponible'}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <User className="h-4 w-4 text-muted-foreground" />
@@ -291,6 +304,14 @@ export default function ClientDetail() {
         clientId={clientId || ""}
         onClose={() => setShowCreateAppointment(false)}
       />
+
+      {client && (
+        <ClientEditDialog
+          open={showEditClient}
+          client={client}
+          onClose={() => setShowEditClient(false)}
+        />
+      )}
     </div>
   );
 }

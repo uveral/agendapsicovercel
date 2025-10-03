@@ -13,6 +13,7 @@ import {
   type Appointment,
   type InsertAppointment,
   type InsertManualClient,
+  type UpdateClient,
   type TherapistWorkingHours,
   type InsertTherapistWorkingHours,
 } from "@shared/schema";
@@ -55,6 +56,7 @@ export interface IStorage {
   getAllClients(): Promise<User[]>;
   getClient(id: string): Promise<User | undefined>;
   createManualClient(client: InsertManualClient): Promise<User>;
+  updateClient(id: string, client: UpdateClient): Promise<User>;
   deleteClient(id: string): Promise<void>;
   
   // Therapist working hours operations
@@ -216,9 +218,27 @@ export class DatabaseStorage implements IStorage {
         firstName: clientData.firstName,
         lastName: clientData.lastName,
         email: clientData.email || null,
+        phone: clientData.phone || null,
         role: "client",
       })
       .returning();
+    return client;
+  }
+
+  async updateClient(id: string, clientData: UpdateClient): Promise<User> {
+    const [client] = await db
+      .update(users)
+      .set({ 
+        ...clientData, 
+        email: clientData.email || null,
+        phone: clientData.phone || null,
+        updatedAt: new Date() 
+      })
+      .where(eq(users.id, id))
+      .returning();
+    if (!client) {
+      throw new Error("Client not found");
+    }
     return client;
   }
 

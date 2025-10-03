@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
-import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
+import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, updateClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
 import { z } from "zod";
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -223,6 +223,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error creating client:", error);
       res.status(500).json({ message: "Failed to create client" });
+    }
+  });
+
+  app.patch('/api/clients/:id', isAuthenticated, async (req, res) => {
+    try {
+      const data = updateClientSchema.parse(req.body);
+      const client = await storage.updateClient(req.params.id, data);
+      res.json(client);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error updating client:", error);
+      res.status(500).json({ message: "Failed to update client" });
     }
   });
 

@@ -29,6 +29,7 @@ export const users = pgTable("users", {
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
+  phone: varchar("phone"),
   profileImageUrl: varchar("profile_image_url"),
   therapistId: varchar("therapist_id").references(() => therapists.id, { onDelete: "set null" }),
   role: varchar("role", { enum: ["admin", "therapist", "client"] }).notNull().default("client"),
@@ -48,6 +49,16 @@ export const insertManualClientSchema = z.object({
 });
 
 export type InsertManualClient = z.infer<typeof insertManualClientSchema>;
+
+// Schema for updating clients
+export const updateClientSchema = z.object({
+  firstName: z.string().min(1, "Nombre es requerido").optional(),
+  lastName: z.string().min(1, "Apellido es requerido").optional(),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  phone: z.string().optional(),
+});
+
+export type UpdateClient = z.infer<typeof updateClientSchema>;
 
 // Therapists table
 export const therapists = pgTable("therapists", {
