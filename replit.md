@@ -10,14 +10,34 @@ This is a comprehensive scheduling management system designed for a psychology c
 
 ## Recent Changes
 
-**October 3, 2025** - Enhanced Schedule Management
-- Added manual client creation for admins (POST /api/clients)
-- Implemented therapist working hours management with custom time blocks
-- Improved client availability page with flexible schedule configuration
-- Added TherapistScheduleDialog component for managing therapist schedules
-- Rewritten AvailabilityForm to support multiple custom time blocks per day
-- Fixed dayOfWeek indexing to use 0-based system (Sunday=0, Saturday=6)
-- All schedule management features tested end-to-end successfully
+**October 3, 2025** - Complete Feature Set Implementation
+- **Schedule Management Improvements**:
+  - Fixed TherapistScheduleDialog to display Monday as first day of week (with DB conversion)
+  - Fixed disappearing time blocks issue by adjusting useEffect dependencies
+  - Relaxed therapist schedule viewing permissions (any authenticated user can view)
+  - Admin-only requirement maintained for editing therapist schedules
+  
+- **Client Management Enhancements**:
+  - Added client detail page with full profile, availability, and appointment history
+  - Implemented "Ver detalles" button navigation from client cards
+  - Added delete functionality for clients with confirmation dialog
+  - Any authenticated user can view and create clients
+  
+- **Therapist Management**:
+  - Added delete functionality for therapists with confirmation dialog
+  - Maintained admin-only requirement for therapist creation/deletion
+  
+- **Appointment System**:
+  - Implemented appointment creation dialog with full form validation
+  - Admin-only access for creating appointments (security requirement)
+  - Fixed React key warning in WeekCalendar component
+  
+- **Development Tools**:
+  - Added role switching capability (admin ↔ client) for testing in development
+  - Protected by ALLOW_ROLE_SWITCHING flag and NODE_ENV check
+  - Hidden in production for security
+  
+- All features tested end-to-end successfully with comprehensive test coverage
 
 ## User Preferences
 
