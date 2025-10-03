@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Appointment, User } from "@shared/schema";
+import type { Appointment, User, TherapistWorkingHours } from "@shared/schema";
 
 interface WeekCalendarProps {
   therapistName: string;
@@ -11,6 +12,25 @@ interface WeekCalendarProps {
   clients: User[];
   onAppointmentClick?: (appointmentId: string) => void;
 }
+
+const calculateHourRange = (schedule: TherapistWorkingHours[]): number[] => {
+  if (!schedule || schedule.length === 0) {
+    return Array.from({ length: 12 }, (_, i) => 9 + i);
+  }
+  
+  let minHour = 24;
+  let maxHour = 0;
+  
+  for (const block of schedule) {
+    const startHour = parseInt(block.startTime.split(':')[0]);
+    const endHour = parseInt(block.endTime.split(':')[0]);
+    minHour = Math.min(minHour, startHour);
+    maxHour = Math.max(maxHour, endHour);
+  }
+  
+  const hourCount = maxHour - minHour;
+  return Array.from({ length: hourCount }, (_, i) => minHour + i);
+};
 
 export function WeekCalendar({ 
   therapistName, 
@@ -21,7 +41,11 @@ export function WeekCalendar({
 }: WeekCalendarProps) {
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
+  const { data: schedule } = useQuery<TherapistWorkingHours[]>({ 
+    queryKey: ['/api/therapists', therapistId, 'schedule'] 
+  });
+
+  const hours = calculateHourRange(schedule || []);
   
   // Calculate the Monday of the current week based on offset
   const getWeekStart = (offset: number): Date => {

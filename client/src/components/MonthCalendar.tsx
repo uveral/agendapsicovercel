@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Appointment, User } from "@shared/schema";
+import type { Appointment, User, TherapistWorkingHours } from "@shared/schema";
 
 interface MonthCalendarProps {
   therapistName: string;
@@ -11,6 +12,25 @@ interface MonthCalendarProps {
   clients: User[];
   onAppointmentClick?: (appointmentId: string) => void;
 }
+
+const calculateHourRange = (schedule: TherapistWorkingHours[]): number[] => {
+  if (!schedule || schedule.length === 0) {
+    return Array.from({ length: 12 }, (_, i) => 9 + i);
+  }
+  
+  let minHour = 24;
+  let maxHour = 0;
+  
+  for (const block of schedule) {
+    const startHour = parseInt(block.startTime.split(':')[0]);
+    const endHour = parseInt(block.endTime.split(':')[0]);
+    minHour = Math.min(minHour, startHour);
+    maxHour = Math.max(maxHour, endHour);
+  }
+  
+  const hourCount = maxHour - minHour;
+  return Array.from({ length: hourCount }, (_, i) => minHour + i);
+};
 
 export function MonthCalendar({ 
   therapistName, 
@@ -23,7 +43,11 @@ export function MonthCalendar({
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
-  const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
+  const { data: schedule } = useQuery<TherapistWorkingHours[]>({ 
+    queryKey: ['/api/therapists', therapistId, 'schedule'] 
+  });
+
+  const hours = calculateHourRange(schedule || []);
   
   // Calculate days in the current month
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
