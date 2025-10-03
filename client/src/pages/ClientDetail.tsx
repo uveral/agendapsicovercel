@@ -11,6 +11,7 @@ import { es } from "date-fns/locale";
 import ClientAvailabilityMatrix from "@/components/ClientAvailabilityMatrix";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 import ClientEditDialog from "@/components/ClientEditDialog";
+import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 
 export default function ClientDetail() {
   const params = useParams();
@@ -19,6 +20,7 @@ export default function ClientDetail() {
   const [showEditAvailability, setShowEditAvailability] = useState(false);
   const [showCreateAppointment, setShowCreateAppointment] = useState(false);
   const [showEditClient, setShowEditClient] = useState(false);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
 
   const { data: client, isLoading: clientLoading, error: clientError } = useQuery<UserType>({
     queryKey: [`/api/clients/${clientId}`],
@@ -226,10 +228,10 @@ export default function ClientDetail() {
                 {upcomingAppointments.slice(0, 5).map((apt) => (
                   <div 
                     key={apt.id} 
-                    className="flex items-start justify-between p-3 rounded-md border"
+                    className="flex items-start justify-between gap-3 p-3 rounded-md border"
                     data-testid={`appointment-${apt.id}`}
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1 flex-1">
                       <p className="text-sm font-medium">
                         {format(new Date(apt.date), 'EEEE, d MMMM yyyy', { locale: es })}
                       </p>
@@ -237,10 +239,20 @@ export default function ClientDetail() {
                         {apt.startTime} - {apt.endTime}
                       </p>
                     </div>
-                    <Badge variant={apt.status === 'confirmed' ? 'default' : 'secondary'}>
-                      {apt.status === 'confirmed' ? 'Confirmada' : 
-                       apt.status === 'pending' ? 'Pendiente' : 'Cancelada'}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={apt.status === 'confirmed' ? 'default' : 'secondary'}>
+                        {apt.status === 'confirmed' ? 'Confirmada' : 
+                         apt.status === 'pending' ? 'Pendiente' : 'Cancelada'}
+                      </Badge>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setSelectedAppointmentId(apt.id)}
+                        data-testid={`button-edit-appointment-${apt.id}`}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -312,6 +324,11 @@ export default function ClientDetail() {
           onClose={() => setShowEditClient(false)}
         />
       )}
+
+      <AppointmentEditDialog
+        appointmentId={selectedAppointmentId}
+        onClose={() => setSelectedAppointmentId(null)}
+      />
     </div>
   );
 }
