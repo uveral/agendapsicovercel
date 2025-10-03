@@ -8,6 +8,17 @@ This is a comprehensive scheduling management system designed for a psychology c
 
 **Target Users**: Psychology center administrators and staff managing multiple therapists and client appointments.
 
+## Recent Changes
+
+**October 3, 2025** - Enhanced Schedule Management
+- Added manual client creation for admins (POST /api/clients)
+- Implemented therapist working hours management with custom time blocks
+- Improved client availability page with flexible schedule configuration
+- Added TherapistScheduleDialog component for managing therapist schedules
+- Rewritten AvailabilityForm to support multiple custom time blocks per day
+- Fixed dayOfWeek indexing to use 0-based system (Sunday=0, Saturday=6)
+- All schedule management features tested end-to-end successfully
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -44,9 +55,10 @@ Preferred communication style: Simple, everyday language.
 **API Design**: RESTful JSON API with the following resource endpoints:
 - `/api/auth/*` - User authentication via Replit Auth (OpenID Connect)
 - `/api/therapists` - Therapist CRUD operations
-- `/api/clients` - Client listing and management  
+- `/api/therapists/:id/schedule` - Therapist working hours management (GET/PUT)
+- `/api/clients` - Client listing and manual creation (GET/POST)
 - `/api/appointments` - Appointment CRUD operations
-- `/api/availability` - Client availability preferences
+- `/api/availability` - Client availability preferences with custom time blocks
 
 **Authentication & Authorization**:
 - Replit Auth integration using OpenID Connect with Passport.js strategy
@@ -69,8 +81,9 @@ Preferred communication style: Simple, everyday language.
 1. **sessions** - Express session storage (required for authentication)
 2. **users** - User accounts with roles (admin/client), linked to Replit Auth
 3. **therapists** - Therapist profiles with specialty, contact info
-4. **client_availability** - Time slot preferences per client (day of week, time ranges)
-5. **appointments** - Scheduled sessions linking therapists and clients with status tracking
+4. **therapist_working_hours** - Therapist work schedules with custom time blocks per day (0-6, Sunday-Saturday)
+5. **client_availability** - Client availability preferences with flexible time slots (0-6, Sunday-Saturday)
+6. **appointments** - Scheduled sessions linking therapists and clients with status tracking
 
 **Key Architectural Decisions**:
 - **UUID primary keys** using PostgreSQL's `gen_random_uuid()` for all entities
