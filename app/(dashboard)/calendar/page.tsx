@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { Therapist, Appointment, User } from "@/lib/types";
 
-export default function Calendar() {
+function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -261,5 +261,17 @@ export default function Calendar() {
         }}
       />
     </div>
+  );
+}
+
+export default function Calendar() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Cargando calendario...</div>
+      </div>
+    }>
+      <CalendarContent />
+    </Suspense>
   );
 }
