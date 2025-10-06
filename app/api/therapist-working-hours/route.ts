@@ -14,7 +14,7 @@ export async function GET() {
   }
 
   // Convert snake_case to camelCase
-  const camelCaseHours = (workingHours || []).map((slot: any) => ({
+  const camelCaseHours = (workingHours || []).map((slot: Record<string, unknown>) => ({
     id: slot.id,
     therapistId: slot.therapist_id,
     dayOfWeek: slot.day_of_week,

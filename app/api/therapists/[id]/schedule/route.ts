@@ -19,7 +19,7 @@ export async function GET(
   }
 
   // Convert snake_case to camelCase
-  const camelCaseSchedule = schedule.map((slot: any) => ({
+  const camelCaseSchedule = schedule.map((slot: Record<string, unknown>) => ({
     id: slot.id,
     therapistId: slot.therapist_id,
     dayOfWeek: slot.day_of_week,
@@ -47,7 +47,7 @@ export async function PUT(
     .eq('therapist_id', id);
 
   // Insert new schedule
-  const dbSlots = slots.map((slot: any) => ({
+  const dbSlots = slots.map((slot: Record<string, unknown>) => ({
     therapist_id: id,
     day_of_week: slot.dayOfWeek,
     start_time: slot.startTime,
@@ -64,7 +64,7 @@ export async function PUT(
   }
 
   // Convert snake_case to camelCase
-  const camelCaseSchedule = (newSchedule || []).map((slot: any) => ({
+  const camelCaseSchedule = (newSchedule || []).map((slot: Record<string, unknown>) => ({
     id: slot.id,
     therapistId: slot.therapist_id,
     dayOfWeek: slot.day_of_week,

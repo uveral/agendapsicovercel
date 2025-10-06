@@ -2,33 +2,33 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 // Helper function to convert snake_case to camelCase
-function toCamelCase(obj: any): any {
+function toCamelCase<T = unknown>(obj: T): T {
   if (Array.isArray(obj)) {
-    return obj.map(toCamelCase);
+    return obj.map(toCamelCase) as T;
   } else if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((result, key) => {
       const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-      result[camelKey] = toCamelCase(obj[key]);
+      result[camelKey] = toCamelCase((obj as Record<string, unknown>)[key]);
       return result;
-    }, {} as any);
+    }, {} as Record<string, unknown>) as T;
   }
   return obj;
 }
 
 // Helper function to convert camelCase to snake_case
-function toSnakeCase(obj: any): any {
+function toSnakeCase<T = unknown>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
   if (Array.isArray(obj)) {
-    return obj.map(toSnakeCase);
+    return obj.map(toSnakeCase) as T;
   } else if (typeof obj === 'object' && !(obj instanceof Date)) {
     return Object.keys(obj).reduce((result, key) => {
       // Convert camelCase to snake_case (firstName -> first_name)
       const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-      result[snakeKey] = toSnakeCase(obj[key]);
+      result[snakeKey] = toSnakeCase((obj as Record<string, unknown>)[key]);
       return result;
-    }, {} as any);
+    }, {} as Record<string, unknown>) as T;
   }
   return obj;
 }
