@@ -9,6 +9,7 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  transpilePackages: ['@radix-ui/react-tooltip'],
 };
 
 export default nextConfig;
