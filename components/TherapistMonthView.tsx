@@ -5,7 +5,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Appointment, User } from "@/lib/types";
 
 interface TherapistMonthViewProps {

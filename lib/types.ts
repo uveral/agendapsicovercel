@@ -155,18 +155,18 @@ export interface SwapSuggestion {
 export interface Setting {
   id: string;
   key: string;
-  value: any;
+  value: unknown;
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
 }
 
 export const insertSettingSchema = z.object({
   key: z.string(),
-  value: z.any(),
+  value: z.unknown(),
 });
 
 export const updateSettingSchema = z.object({
-  value: z.any(),
+  value: z.unknown(),
 });
 
 export type InsertSetting = z.infer<typeof insertSettingSchema>;

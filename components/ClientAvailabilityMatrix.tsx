@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ClientAvailability } from "@/lib/types";
@@ -70,7 +69,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
       });
       onClose();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       let errorMessage = "No se pudo guardar la disponibilidad";
       
       if (error.message) {

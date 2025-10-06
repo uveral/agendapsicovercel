@@ -71,7 +71,7 @@ export default function ClientEditDialog({ open, client, onClose }: ClientEditDi
       });
       onClose();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "No se pudo actualizar el cliente",

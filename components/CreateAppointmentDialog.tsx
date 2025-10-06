@@ -397,7 +397,7 @@ export default function CreateAppointmentDialog({ open, clientId, initialTherapi
       setSelectedSuggestion(null);
       onClose();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "No se pudo crear la cita",
