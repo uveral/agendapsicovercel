@@ -8,7 +8,18 @@
       "Bash(curl:*)",
       "Bash(cat:*)",
       "Bash(git ls-tree:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(for:*)",
+      "Bash(do)",
+      "Bash(if [ -f \"$file\" ])",
+      "Bash(! grep -q \"''use client''\" \"$file\")",
+      "Bash(then)",
+      "Bash(echo:*)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(do sed -i \"1i ''use client'';\\n\" \"$file\")",
+      "Bash(do sed -i \"s|from \"\"@shared/schema\"\"|from \"\"@/lib/types\"\"|g\" \"$file\")",
+      "Bash(do sed -i \"0,/''use client'';/{//d;}\" \"$file\")"
     ],
     "deny": [],
     "ask": []
