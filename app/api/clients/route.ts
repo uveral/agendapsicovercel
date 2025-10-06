@@ -17,10 +17,14 @@ function toCamelCase(obj: any): any {
 
 // Helper function to convert camelCase to snake_case
 function toSnakeCase(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
   if (Array.isArray(obj)) {
     return obj.map(toSnakeCase);
-  } else if (obj !== null && typeof obj === 'object') {
+  } else if (typeof obj === 'object' && !(obj instanceof Date)) {
     return Object.keys(obj).reduce((result, key) => {
+      // Convert camelCase to snake_case (firstName -> first_name)
       const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
       result[snakeKey] = toSnakeCase(obj[key]);
       return result;
