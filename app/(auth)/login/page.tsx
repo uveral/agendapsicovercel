@@ -23,7 +23,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -37,10 +37,10 @@ export default function LoginPage() {
 
       router.push('/dashboard');
       router.refresh();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Error al iniciar sesión',
-        description: error.message || 'Credenciales inválidas',
+        description: error instanceof Error ? error.message : 'Credenciales inválidas',
         variant: 'destructive',
       });
     } finally {

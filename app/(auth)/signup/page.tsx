@@ -25,7 +25,7 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -46,10 +46,10 @@ export default function SignupPage() {
 
       router.push('/dashboard');
       router.refresh();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Error al crear cuenta',
-        description: error.message || 'No se pudo crear la cuenta',
+        description: error instanceof Error ? error.message : 'No se pudo crear la cuenta',
         variant: 'destructive',
       });
     } finally {
