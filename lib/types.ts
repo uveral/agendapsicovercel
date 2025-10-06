@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// User types
+// User types (extends Supabase User with additional fields)
 export interface User {
   id: string;
   email?: string | null;
@@ -9,7 +9,7 @@ export interface User {
   phone?: string | null;
   profileImageUrl?: string | null;
   therapistId?: string | null;
-  role: "admin" | "therapist" | "client";
+  role?: "admin" | "therapist" | "client" | null;
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
 }
