@@ -54,12 +54,12 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const supabase = createClient();
   const { user } = useAuth();
 
   const isAdmin = user?.role === 'admin';
 
   const handleLogout = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     toast({
       title: 'Sesión cerrada',
