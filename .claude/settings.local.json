@@ -21,7 +21,8 @@
       "Bash(do sed -i \"s|from \"\"@shared/schema\"\"|from \"\"@/lib/types\"\"|g\" \"$file\")",
       "Bash(do sed -i \"0,/''use client'';/{//d;}\" \"$file\")",
       "Bash(node:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(gh api:*)"
     ],
     "deny": [],
     "ask": []
