@@ -342,10 +342,16 @@
   pointer-events: auto !important;
 }
 
-/* Prevent Radix overlays from blocking the sidebar */
-[data-radix-focus-guard],
-[data-radix-portal] > div[style*="position: fixed"] {
+/* Prevent Radix overlays from blocking interaction when closed */
+[data-radix-focus-guard] {
   pointer-events: none !important;
+}
+
+/* Only disable pointer-events on Radix overlays that are closed */
+[data-radix-portal] [data-state="closed"],
+[data-radix-portal] [data-state="closed"] * {
+  pointer-events: none !important;
+  display: none !important;
 }
 
 /* Ensure header and sidebar trigger are always clickable */
