@@ -3,7 +3,7 @@
 import React, { useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Therapist, Appointment } from '@/lib/types';
-import { FixedSizeGrid } from 'react-window';
+import * as ReactWindow from 'react-window';
 import useResizeObserver from 'use-resize-observer';
 
 interface SimpleOccupancyGridProps {
@@ -63,7 +63,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
             ))}
         </div>
         <div ref={ref} style={{ width: '100%', height: 'calc(100% - 40px)' }}>
-            <FixedSizeGrid
+            <ReactWindow.FixedSizeGrid
                 columnCount={therapists.length}
                 columnWidth={columnWidth}
                 height={height}
@@ -72,7 +72,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
                 width={width}
             >
                 {Cell}
-            </FixedSizeGrid>
+            </ReactWindow.FixedSizeGrid>
         </div>
       </CardContent>
     </Card>

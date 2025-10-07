@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Appointment } from '@/lib/types';
-import { FixedSizeGrid } from 'react-window';
+import * as ReactWindow from 'react-window';
 import useResizeObserver from 'use-resize-observer';
 
 interface CalendarViewProps {
@@ -118,7 +118,7 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
           ))}
         </div>
         <div ref={ref} style={{ width: '100%', height: 'calc(100% - 40px)' }}>
-          <FixedSizeGrid
+          <ReactWindow.FixedSizeGrid
             columnCount={7}
             columnWidth={columnWidth}
             height={height}
@@ -128,7 +128,7 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
             itemData={{ appointmentsByDate }}
           >
             {Cell}
-          </FixedSizeGrid>
+          </ReactWindow.FixedSizeGrid>
         </div>
       </CardContent>
     </Card>
