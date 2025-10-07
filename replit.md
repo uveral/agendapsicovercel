@@ -55,7 +55,7 @@ The frontend is built with React 18 and TypeScript, using Vite for development a
 
 ### Backend Architecture
 
-The backend is an Express.js application with TypeScript, running on Node.js. It provides a RESTful JSON API for managing therapists, clients, appointments, and availability. Authentication is handled via Replit Auth (OpenID Connect) with Passport.js, implementing session-based and role-based access control (admin vs. client). Middleware includes JSON parsing, session management, request logging, and error handling.
+The backend was originally an Express.js application with TypeScript, but authentication is now managed exclusively through Supabase Auth with stateless JWTs. Legacy middleware such as session handling has been removed in favor of verifying Supabase access tokens on each request.
 
 ### Database Architecture
 
@@ -64,7 +64,7 @@ The system uses a PostgreSQL database, accessed via Drizzle ORM with Neon's serv
 ## External Dependencies
 
 **Authentication Service**:
-- **Replit Auth (OpenID Connect)**: Used for user authentication, identity, and session management.
+- **Supabase Auth**: Provides user authentication, identity, and role-based access control using JWTs.
 
 **Database**:
 - **Neon PostgreSQL**: Serverless PostgreSQL database for data storage.

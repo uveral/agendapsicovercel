@@ -11,7 +11,7 @@ AgendaPsico is a psychology clinic scheduling management system built for Centro
 - **Frontend**: React 18 + TypeScript + Vite + Wouter (routing) + TanStack Query
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Neon (serverless) with Drizzle ORM
-- **Auth**: Replit Auth (passport-based session authentication)
+- **Auth**: Supabase Auth (JWT-based authentication)
 - **UI**: Radix UI + Tailwind CSS + shadcn/ui components
 - **PDF Generation**: jsPDF + jsPDF-autoTable
 
@@ -30,7 +30,7 @@ server/          # Express backend
   routes.ts      # All API route definitions
   storage.ts     # Database operations layer (IStorage interface)
   db.ts          # Drizzle database connection
-  replitAuth.ts  # Authentication middleware
+  supabaseAuth.ts  # Supabase authentication middleware
   vite.ts        # Vite dev server integration
 shared/          # Code shared between client and server
   schema.ts      # Drizzle schemas + Zod validation schemas
@@ -48,7 +48,7 @@ shared/          # Code shared between client and server
 - Schema changes require running `npm run db:push` to sync with database
 
 ### Authentication & Authorization
-- Uses Replit Auth with session-based authentication
+- Uses Supabase Auth with stateless JWT authentication
 - Three user roles: `admin`, `therapist`, `client`
 - Middleware: `isAuthenticated`, `isAdmin`, `canManageAppointment` (defined in `server/routes.ts`)
 - Users table stores role and optional `therapistId` (links user accounts to therapist records)
