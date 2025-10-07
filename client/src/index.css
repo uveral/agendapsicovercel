@@ -326,3 +326,24 @@
     inset: -1px;
   }
 }
+
+/* Fix for sidebar being blocked by Radix UI components */
+[data-slot="sidebar-container"],
+[data-slot="sidebar"],
+[data-sidebar="sidebar"] {
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
+/* Ensure sidebar content is always clickable */
+[data-slot="sidebar-container"] *,
+[data-slot="sidebar"] *,
+[data-sidebar="sidebar"] * {
+  pointer-events: auto !important;
+}
+
+/* Prevent Radix overlays from blocking the sidebar */
+[data-radix-focus-guard],
+[data-radix-portal] > div[style*="position: fixed"] {
+  pointer-events: none !important;
+}

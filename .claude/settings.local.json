@@ -27,7 +27,9 @@
       "Bash(tail:*)",
       "Bash(npm run check:*)",
       "Bash(npm run type-check:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(npm run dev:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
