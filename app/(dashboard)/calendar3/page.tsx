@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -8,6 +7,7 @@ import { TherapistSelector } from '@/components/TherapistSelector';
 import { CalendarView } from '@/components/CalendarView';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SimpleOccupancyGrid } from '@/components/SimpleOccupancyGrid';
+import { SimpleAvailabilitySummary } from '@/components/SimpleAvailabilitySummary';
 
 export default function Calendar3() {
   const [selectedTherapist, setSelectedTherapist] = useState('all');
@@ -43,9 +43,12 @@ export default function Calendar3() {
           <TabsTrigger value="general">Vista General</TabsTrigger>
           <TabsTrigger value="individual">Vista Individual</TabsTrigger>
         </TabsList>
-        <TabsContent value="general">
+        <TabsContent value="general" className="space-y-4">
           <SimpleOccupancyGrid
             therapists={therapists}
+            appointments={appointments}
+          />
+          <SimpleAvailabilitySummary
             appointments={appointments}
           />
         </TabsContent>
