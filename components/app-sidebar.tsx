@@ -50,6 +50,11 @@ const menuItems = [
     icon: Calendar,
   },
   {
+    title: 'Calendario 3',
+    url: '/calendar3',
+    icon: Calendar,
+  },
+  {
     title: 'Citas',
     url: '/appointments',
     icon: Clock,
