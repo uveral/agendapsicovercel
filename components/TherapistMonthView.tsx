@@ -49,15 +49,14 @@ const getDaysInMonth = (year: number, month: number): CalendarDay[] => {
   return days;
 };
 
-function _TherapistMonthView({
-  therapistName,
-  therapistId,
-  appointments,
+function TherapistMonthViewComponent({ 
+  therapistName, 
+  therapistId, 
+  appointments, 
   clients,
   onAppointmentClick,
   onDayClick
-}: TherapistMonthViewProps) {
-  const today = new Date();
+}: TherapistMonthViewProps) {  const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
@@ -276,4 +275,4 @@ function _TherapistMonthView({
   );
 }
 
-export const TherapistMonthView = React.memo(_TherapistMonthView);
+export const TherapistMonthView = React.memo(TherapistMonthViewComponent);
