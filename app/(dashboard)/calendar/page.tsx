@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
@@ -42,15 +42,15 @@ function CalendarContent() {
   });
 
   // Determine initial selected therapist based on user role
-  const getInitialTherapist = () => {
+  const initialTherapist = useMemo(() => {
     if (therapistParam) return therapistParam;
     if (user?.role === "therapist" && user?.therapistId) {
       return user.therapistId;
     }
     return "all";
-  };
+  }, [therapistParam, user?.role, user?.therapistId]);
 
-  const [selectedTherapist, setSelectedTherapist] = useState(getInitialTherapist());
+  const [selectedTherapist, setSelectedTherapist] = useState(initialTherapist);
   const [viewType, setViewType] = useState<"general" | "individual">(
     therapistParam || (user?.role === "therapist" && user?.therapistId) ? "individual" : "general"
   );
@@ -62,26 +62,18 @@ function CalendarContent() {
     date?: string;
   }>({});
 
-  // Update selected therapist when user or therapists data loads
-  useEffect(() => {
-    if (!therapistParam && user?.role === "therapist" && user?.therapistId) {
-      setSelectedTherapist(user.therapistId);
-      setViewType("individual");
-    }
-  }, [user, therapistParam]);
-
   // Update selected therapist when query param changes
   useEffect(() => {
-    if (therapistParam && therapistParam !== selectedTherapist) {
+    if (therapistParam) {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
     }
-  }, [therapistParam, selectedTherapist]);
+  }, [therapistParam]);
 
-  const therapistsList = [
+  const therapistsList = useMemo(() => [
     { id: "all", name: "Todos los terapeutas" },
     ...therapists.map((t) => ({ id: t.id, name: t.name })),
-  ];
+  ], [therapists]);
 
   const handleTherapistChange = (value: string) => {
     setSelectedTherapist(value);
