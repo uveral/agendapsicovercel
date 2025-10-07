@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,42 @@ export function WeekCalendar({
   });
 
   const hours = calculateHourRange(schedule || []);
+
+  const formatDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const appointmentsBySlot = useMemo(() => {
+    const map = new Map<string, Appointment>();
+
+    for (const appointment of appointments) {
+      if (appointment.therapistId !== therapistId || appointment.status === "cancelled") {
+        continue;
+      }
+
+      const appointmentDate = new Date(appointment.date);
+      const dateKey = formatDateKey(appointmentDate);
+      const [startHour] = appointment.startTime.split(":").map(Number);
+      const [endHour] = appointment.endTime.split(":").map(Number);
+
+      for (let hour = startHour; hour < endHour; hour++) {
+        map.set(`${dateKey}-${hour}`, appointment);
+      }
+    }
+
+    return map;
+  }, [appointments, therapistId]);
+
+  const clientsById = useMemo(() => {
+    const map = new Map<string, User>();
+    for (const client of clients) {
+      map.set(client.id, client);
+    }
+    return map;
+  }, [clients]);
   
   // Calculate the Monday of the current week based on offset
   const getWeekStart = (offset: number): Date => {
@@ -102,25 +138,12 @@ export function WeekCalendar({
 
   // Find appointment for therapist at a specific time
   const getAppointment = (date: Date, hour: number): Appointment | undefined => {
-    return appointments.find((apt) => {
-      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
-      
-      const aptDate = new Date(apt.date);
-      const isSameDay = aptDate.toDateString() === date.toDateString();
-      
-      if (!isSameDay) return false;
-      
-      // Parse start and end times
-      const [startHour] = apt.startTime.split(':').map(Number);
-      const [endHour] = apt.endTime.split(':').map(Number);
-      
-      return hour >= startHour && hour < endHour;
-    });
+    return appointmentsBySlot.get(`${formatDateKey(date)}-${hour}`);
   };
 
   // Get client name from appointment
   const getClientName = (appointment: Appointment): string => {
-    const client = clients.find((c) => c.id === appointment.clientId);
+    const client = clientsById.get(appointment.clientId ?? "");
     if (!client) return 'Cliente';
     return `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
   };
