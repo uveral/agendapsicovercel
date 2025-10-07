@@ -59,13 +59,6 @@ export function AppSidebar() {
 
   const isAdmin = user?.role === 'admin';
 
-  // Debug: Log every render
-  const renderCount = React.useRef(0);
-  renderCount.current++;
-  if (renderCount.current > 10) {
-    console.error('[AppSidebar] TOO MANY RENDERS:', renderCount.current);
-  }
-
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();

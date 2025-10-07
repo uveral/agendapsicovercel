@@ -26,13 +26,6 @@ function CalendarContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
 
-  // Debug: Log every render
-  const renderCountRef = React.useRef(0);
-  renderCountRef.current++;
-  if (renderCountRef.current > 10) {
-    console.error('[CalendarContent] TOO MANY RENDERS:', renderCountRef.current);
-  }
-
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
 
