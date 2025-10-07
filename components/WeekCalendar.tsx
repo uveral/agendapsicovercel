@@ -44,8 +44,9 @@ export function WeekCalendar({
 }: WeekCalendarProps) {
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const { data: schedule } = useQuery<TherapistWorkingHours[]>({ 
-    queryKey: ['/api/therapists', therapistId, 'schedule'] 
+  const { data: schedule } = useQuery<TherapistWorkingHours[]>({
+    queryKey: [`/api/therapists/${therapistId}/schedule`],
+    enabled: !!therapistId,
   });
 
   const hours = calculateHourRange(schedule || []);

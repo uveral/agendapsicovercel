@@ -28,7 +28,8 @@ export function AvailabilitySummary({
   showTherapistName = false
 }: AvailabilitySummaryProps) {
   const { data: schedule = [] } = useQuery<TherapistWorkingHours[]>({
-    queryKey: [`/api/therapists/${therapistId}/schedule`]
+    queryKey: [`/api/therapists/${therapistId}/schedule`],
+    enabled: !!therapistId,
   });
 
   const calculateFreeSlots = (): TimeSlot[] => {
