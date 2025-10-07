@@ -11,6 +11,8 @@ import { FixedSizeGrid } from 'react-window';
 interface CalendarViewProps {
   appointments: Appointment[];
   selectedTherapist: string;
+  onAppointmentClick?: (appointmentId: string) => void;
+  onDayClick?: (date: Date) => void;
 }
 
 const getCalendarGrid = (year: number, month: number): (Date | null)[] => {
@@ -32,7 +34,7 @@ const getCalendarGrid = (year: number, month: number): (Date | null)[] => {
   return grid;
 };
 
-export function CalendarView({ appointments, selectedTherapist }: CalendarViewProps) {
+export function CalendarView({ appointments, selectedTherapist, onAppointmentClick, onDayClick }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
@@ -77,7 +79,8 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
   const columnWidth = width / 7;
   const rowHeight = height / rowCount;
 
-  const Cell = useCallback(({ columnIndex, rowIndex, style }: { columnIndex: number, rowIndex: number, style: React.CSSProperties }) => {
+  const Cell = useCallback(({ columnIndex, rowIndex, style, data }: { columnIndex: number, rowIndex: number, style: React.CSSProperties, data: { appointmentsByDate: Map<string, Appointment[]>, onAppointmentClick?: (appointmentId: string) => void, onDayClick?: (date: Date) => void } }) => {
+    const { appointmentsByDate, onAppointmentClick, onDayClick } = data;
     const index = rowIndex * 7 + columnIndex;
     const day = calendarGrid[index];
 
@@ -88,11 +91,24 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
     const dayAppointments = appointmentsByDate.get(day.toDateString()) || [];
 
     return (
-      <div style={style} className="border rounded-md p-2 overflow-hidden">
+      <div
+        style={style}
+        className="border rounded-md p-2 overflow-hidden"
+        onClick={() => day && onDayClick?.(day)}
+      >
         <div>{day.getDate()}</div>
         <div className="text-xs space-y-1">
           {dayAppointments.map(apt => (
-            <div key={apt.id} className="bg-blue-100 rounded-sm px-1 truncate">{apt.startTime}</div>
+            <div
+              key={apt.id}
+              className="bg-blue-100 rounded-sm px-1 truncate"
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent day click from firing
+                onAppointmentClick?.(apt.id);
+              }}
+            >
+              {apt.startTime}
+            </div>
           ))}
         </div>
       </div>
@@ -126,7 +142,7 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
             rowCount={rowCount}
             rowHeight={rowHeight}
             width={width}
-            itemData={{ appointmentsByDate }}
+            itemData={{ appointmentsByDate, onAppointmentClick, onDayClick }}
           >
             {Cell}
           </FixedSizeGrid>
