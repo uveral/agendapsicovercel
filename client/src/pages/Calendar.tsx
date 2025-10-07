@@ -245,20 +245,24 @@ export default function Calendar() {
         </TabsContent>
       </Tabs>
 
-      <AppointmentEditDialog
-        appointmentId={editingAppointmentId}
-        onClose={() => setEditingAppointmentId(null)}
-      />
+      {editingAppointmentId && (
+        <AppointmentEditDialog
+          appointmentId={editingAppointmentId}
+          onClose={() => setEditingAppointmentId(null)}
+        />
+      )}
 
-      <CreateAppointmentDialog
-        open={createDialogOpen}
-        initialTherapistId={createDialogContext.therapistId}
-        initialDate={createDialogContext.date}
-        onClose={() => {
-          setCreateDialogOpen(false);
-          setCreateDialogContext({});
-        }}
-      />
+      {createDialogOpen && (
+        <CreateAppointmentDialog
+          open={createDialogOpen}
+          initialTherapistId={createDialogContext.therapistId}
+          initialDate={createDialogContext.date}
+          onClose={() => {
+            setCreateDialogOpen(false);
+            setCreateDialogContext({});
+          }}
+        />
+      )}
     </div>
   );
 }

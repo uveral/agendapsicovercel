@@ -24,7 +24,9 @@
       "Bash(grep:*)",
       "Bash(gh api:*)",
       "Bash(head:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(npm run check:*)",
+      "Bash(npm run type-check:*)"
     ],
     "deny": [],
     "ask": []
