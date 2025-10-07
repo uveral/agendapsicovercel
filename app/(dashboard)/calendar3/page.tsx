@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -10,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SimpleOccupancyGrid } from '@/components/SimpleOccupancyGrid';
 import { SimpleAvailabilitySummary } from '@/components/SimpleAvailabilitySummary';
 import { Button } from "@/components/ui/button";
-import { WeekCalendar } from "@/components/WeekCalendar";
+import { SimpleWeekCalendar } from "@/components/SimpleWeekCalendar";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 
@@ -100,7 +99,7 @@ export default function Calendar3() {
                         selectedTherapist={selectedTherapist}
                     />
                 ) : (
-                    <WeekCalendar
+                    <SimpleWeekCalendar
                         therapistName={therapists.find((t) => t.id === selectedTherapist)?.name || ''}
                         therapistId={selectedTherapist}
                         appointments={appointments}
