@@ -1,102 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import type { Therapist, Appointment, User } from '@/lib/types';
-import { TherapistSelector } from '@/components/TherapistSelector';
-import { CalendarView } from '@/components/CalendarView';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SimpleOccupancyGrid } from '@/components/SimpleOccupancyGrid';
-import { SimpleAvailabilitySummary } from '@/components/SimpleAvailabilitySummary';
-import { Button } from "@/components/ui/button";
-import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
-import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
+import React from 'react';
 
-export default function Calendar3() {
-  const [selectedTherapist, setSelectedTherapist] = useState('all');
-  const [viewType, setViewType] = useState<'general' | 'individual'>('general');
-
-  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createDialogContext, setCreateDialogContext] = useState<{
-    therapistId?: string;
-    date?: string;
-  }>({});
-
-  const { data: therapists = [], isLoading: isLoadingTherapists } = useQuery<Therapist[]>({
-    queryKey: ["/api/therapists"],
-  });
-
-  const { data: appointments = [] } = useQuery<Appointment[]>({
-    queryKey: ["/api/appointments"],
-  });
-
-  const { data: clients = [] } = useQuery<User[]>({
-    queryKey: ["/api/clients"],
-  });
-
-  const handleDayClick = (therapistId: string, date: string) => {
-    setCreateDialogContext({ therapistId, date });
-    setCreateDialogOpen(true);
-  };
-
-  if (isLoadingTherapists) {
-    return (
-      <div>
-        <h1>Calendario 3</h1>
-        <p>Cargando datos...</p>
-      </div>
-    );
-  }
-
+export default function Calendar3Page() {
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Calendario 3</h1>
-      <TherapistSelector
-        therapists={therapists}
-        selectedTherapist={selectedTherapist}
-        onSelectTherapist={setSelectedTherapist}
-      />
-      <Tabs value={viewType} onValueChange={(value) => setViewType(value as 'general' | 'individual')}>
-        <TabsList>
-          <TabsTrigger value="general">Vista General</TabsTrigger>
-          <TabsTrigger value="individual">Vista Individual</TabsTrigger>
-        </TabsList>
-        <TabsContent value="general" className="space-y-4">
-
-          <SimpleAvailabilitySummary
-            appointments={appointments}
-          />
-        </TabsContent>
-        <TabsContent value="individual">
-
-            {selectedTherapist !== 'all' ? (
-                <div className="space-y-4">
-                    <CalendarView
-                        appointments={appointments}
-                        selectedTherapist={selectedTherapist}
-                    />
-                </div>
-            ) : (
-                <div className="text-center py-12 text-muted-foreground">
-                    Por favor, selecciona un terapeuta para ver su calendario.
-                </div>
-            )}
-        </TabsContent>
-      </Tabs>
-      <AppointmentEditDialog
-        appointmentId={editingAppointmentId}
-        onClose={() => setEditingAppointmentId(null)}
-      />
-      <CreateAppointmentDialog
-        open={createDialogOpen}
-        initialTherapistId={createDialogContext.therapistId}
-        initialDate={createDialogContext.date}
-        onClose={() => {
-          setCreateDialogOpen(false);
-          setCreateDialogContext({});
-        }}
-      />
+    <div>
+      <h1>Calendar 3 - Phase 0: Initial Setup</h1>
+      <p>This is the initial setup for Calendar 3.</p>
     </div>
   );
 }
