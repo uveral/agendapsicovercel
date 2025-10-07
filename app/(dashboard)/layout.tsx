@@ -1,3 +1,4 @@
+import React, { Suspense } from 'react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
 import { Separator } from '@/components/ui/separator';
@@ -21,7 +22,9 @@ export default function DashboardLayout({
           </div>
         </header>
         <main className="flex-1 p-6">
-          {children}
+          <Suspense fallback={<div>Loading...</div>}>
+            {children}
+          </Suspense>
         </main>
       </SidebarInset>
     </SidebarProvider>
