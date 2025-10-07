@@ -40,7 +40,7 @@ export default function Calendar3Page() {
     queryFn: getUsers,
   });
 
-  const selectedTherapistData = therapists.find(t => t.id === selectedTherapist);
+  const selectedTherapistData = therapists?.find(t => t.id === selectedTherapist);
 
   const handleAppointmentClick = (appointmentId: string) => {
     setEditingAppointmentId(appointmentId);
