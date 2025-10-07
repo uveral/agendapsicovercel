@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,67 +14,134 @@ interface OccupancyGridProps {
   onAppointmentClick?: (appointmentId: string) => void;
 }
 
+type NormalizedAppointment = {
+  appointment: Appointment;
+  therapistId: string;
+  dateKey: string;
+  startHour: number;
+  endHour: number;
+};
+
 export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: OccupancyGridProps) {
-  const today = new Date();
+  const today = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }, []);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
-  const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
-  
-  // Calculate days in the current month
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const monthDates = Array.from({ length: daysInMonth }, (_, i) => {
-    return new Date(currentYear, currentMonth, i + 1);
-  });
+  const hours = useMemo(() => Array.from({ length: 12 }, (_, i) => 9 + i), []); // 9:00 to 20:00
+
+  const { daysInMonth, monthDates, monthStartTime, monthEndTime } = useMemo(() => {
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    firstDay.setHours(0, 0, 0, 0);
+    const lastDay = new Date(currentYear, currentMonth + 1, 1);
+    lastDay.setHours(0, 0, 0, 0);
+
+    const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const dates = Array.from({ length: totalDays }, (_, i) => {
+      const date = new Date(firstDay);
+      date.setDate(firstDay.getDate() + i);
+      return date;
+    });
+
+    return {
+      daysInMonth: totalDays,
+      monthDates: dates,
+      monthStartTime: firstDay.getTime(),
+      monthEndTime: lastDay.getTime(),
+    };
+  }, [currentMonth, currentYear]);
+
+  const formatDateKey = useCallback((date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const appointmentsBySlot = useMemo(() => {
+    const map = new Map<string, Appointment>();
+
+    if (!appointments.length) {
+      return map;
+    }
+
+    const normalized: NormalizedAppointment[] = [];
+
+    for (const appointment of appointments) {
+      if (appointment.status === 'cancelled') {
+        continue;
+      }
+
+      const appointmentDate = new Date(appointment.date);
+      appointmentDate.setHours(0, 0, 0, 0);
+      const appointmentTime = appointmentDate.getTime();
+
+      if (appointmentTime < monthStartTime || appointmentTime >= monthEndTime) {
+        continue;
+      }
+
+      const [startHourRaw] = appointment.startTime.split(':');
+      const [endHourRaw] = appointment.endTime.split(':');
+
+      const startHour = parseInt(startHourRaw ?? '0', 10) || 0;
+      const endHour = parseInt(endHourRaw ?? '0', 10) || 0;
+
+      normalized.push({
+        appointment,
+        therapistId: appointment.therapistId,
+        dateKey: formatDateKey(appointmentDate),
+        startHour,
+        endHour: Math.max(startHour, endHour),
+      });
+    }
+
+    for (const item of normalized) {
+      for (let hour = item.startHour; hour < item.endHour; hour++) {
+        map.set(`${item.therapistId}-${item.dateKey}-${hour}`, item.appointment);
+      }
+    }
+
+    return map;
+  }, [appointments, formatDateKey, monthEndTime, monthStartTime]);
 
   // Month names in Spanish
-  const monthNames = [
+  const monthNames = useMemo(() => [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-  ];
+  ], []);
 
   // Navigation functions
-  const goToPreviousMonth = () => {
+  const goToPreviousMonth = useCallback(() => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
       setCurrentYear(currentYear - 1);
     } else {
       setCurrentMonth(currentMonth - 1);
     }
-  };
+  }, [currentMonth, currentYear]);
 
-  const goToNextMonth = () => {
+  const goToNextMonth = useCallback(() => {
     if (currentMonth === 11) {
       setCurrentMonth(0);
       setCurrentYear(currentYear + 1);
     } else {
       setCurrentMonth(currentMonth + 1);
     }
-  };
+  }, [currentMonth, currentYear]);
 
-  const goToToday = () => {
+  const goToToday = useCallback(() => {
     const now = new Date();
     setCurrentMonth(now.getMonth());
     setCurrentYear(now.getFullYear());
-  };
+  }, []);
 
   // Find appointment for a therapist at a specific time
-  const getAppointment = (therapistId: string, date: Date, hour: number): Appointment | undefined => {
-    return appointments.find((apt) => {
-      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
-      
-      const aptDate = new Date(apt.date);
-      const isSameDay = aptDate.toDateString() === date.toDateString();
-      
-      if (!isSameDay) return false;
-      
-      // Parse start and end times
-      const [startHour] = apt.startTime.split(':').map(Number);
-      const [endHour] = apt.endTime.split(':').map(Number);
-      
-      return hour >= startHour && hour < endHour;
-    });
-  };
+  const getAppointment = useCallback((therapistId: string, date: Date, hour: number): Appointment | undefined => {
+    return appointmentsBySlot.get(`${therapistId}-${formatDateKey(date)}-${hour}`);
+  }, [appointmentsBySlot, formatDateKey]);
 
   return (
     <Card>
