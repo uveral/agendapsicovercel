@@ -7,23 +7,12 @@ import { getAppointments, getTherapists, getUsers } from '@/lib/api';
 import { CalendarView } from '@/components/CalendarView';
 import { TherapistSelector } from '@/components/TherapistSelector';
 import { SimpleOccupancyGrid } from '@/components/SimpleOccupancyGrid';
-import { WeekCalendar } from '@/components/WeekCalendar';
+// import { WeekCalendar } from '@/components/WeekCalendar'; // Excluded
 import { Button } from '@/components/ui/button';
-import { AppointmentEditDialog } from '@/components/AppointmentEditDialog';
-import CreateAppointmentDialog from '@/components/CreateAppointmentDialog';
-import { SimpleAvailabilitySummary } from '@/components/SimpleAvailabilitySummary';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Calendar3Page() {
   const [selectedTherapist, setSelectedTherapist] = useState('all');
-  const [calendarView, setCalendarView] = useState<'monthly' | 'weekly'>('monthly');
-  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createDialogContext, setCreateDialogContext] = useState<{
-    therapistId?: string;
-    date?: string;
-  }>({});
-  const [viewType, setViewType] = useState<'general' | 'individual'>('general');
+  const [calendarView, setCalendarView] = useState<'monthly' | 'weekly'>('monthly'); // Added
 
   const { data: appointments } = useQuery<Appointment[]>({ 
     queryKey: ['appointments'],
@@ -40,97 +29,57 @@ export default function Calendar3Page() {
     queryFn: getUsers,
   });
 
-  const selectedTherapistData = therapists?.find(t => t.id === selectedTherapist);
-
-  const handleAppointmentClick = (appointmentId: string) => {
-    setEditingAppointmentId(appointmentId);
-  };
-
-  const handleDayClick = (date: Date) => {
-    setCreateDialogContext({ date: date.toISOString().split('T')[0] });
-    setCreateDialogOpen(true);
-  };
+  const selectedTherapistData = therapists?.find(t => t.id === selectedTherapist); // Added optional chaining
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Calendar 3 - Phase 6: Implement SimpleAvailabilitySummary</h1>
+      <h1 className="text-2xl font-bold">Calendar 3 - Phase 4: Implement WeekCalendar (without WeekCalendar component)</h1>
       <TherapistSelector
         therapists={therapists || []}
         selectedTherapist={selectedTherapist}
         onSelectTherapist={setSelectedTherapist}
       />
-      <Tabs value={viewType} onValueChange={(value) => setViewType(value as 'general' | 'individual')}>
-        <TabsList>
-          <TabsTrigger value="general">Vista General</TabsTrigger>
-          <TabsTrigger value="individual">Vista Individual</TabsTrigger>
-        </TabsList>
-        <TabsContent value="general" className="space-y-4">
-          <SimpleAvailabilitySummary
+      <div className="flex justify-center gap-2 mb-4"> {/* Added */}
+        <Button {/* Added */}
+          variant={calendarView === 'monthly' ? 'default' : 'outline'} {/* Added */}
+          size="sm" {/* Added */}
+          onClick={() => setCalendarView('monthly')} {/* Added */}
+        > {/* Added */}
+          Vista Mensual {/* Added */}
+        </Button> {/* Added */}
+        <Button {/* Added */}
+          variant={calendarView === 'weekly' ? 'default' : 'outline'} {/* Added */}
+          size="sm" {/* Added */}
+          onClick={() => setCalendarView('weekly')} {/* Added */}
+        > {/* Added */}
+          Vista Semanal {/* Added */}
+        </Button> {/* Added */}
+      </div> {/* Added */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
+          {calendarView === 'monthly' ? ( {/* Modified */}
+            <CalendarView
+              appointments={appointments || []}
+              selectedTherapist={selectedTherapist}
+            />
+          ) : ( {/* Modified */}
+            selectedTherapistData ? ( {/* Modified */}
+              <CalendarView // Render CalendarView for weekly view as well
+                appointments={appointments || []}
+                selectedTherapist={selectedTherapist}
+              />
+            ) : ( {/* Modified */}
+              <p>Select a therapist to view weekly calendar</p> {/* Modified */}
+            ) {/* Modified */}
+          )}
+        </div>
+        <div>
+          <SimpleOccupancyGrid
+            therapists={therapists || []}
             appointments={appointments || []}
           />
-        </TabsContent>
-        <TabsContent value="individual">
-          <div className="flex justify-center gap-2 mb-4">
-            <Button
-              variant={calendarView === 'monthly' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setCalendarView('monthly')}
-            >
-              Vista Mensual
-            </Button>
-            <Button
-              variant={calendarView === 'weekly' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setCalendarView('weekly')}
-            >
-              Vista Semanal
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              {calendarView === 'monthly' ? (
-                <CalendarView
-                  appointments={appointments || []}
-                  selectedTherapist={selectedTherapist}
-                  onAppointmentClick={handleAppointmentClick}
-                  onDayClick={handleDayClick}
-                />
-              ) : (
-                selectedTherapistData ? (
-                  <WeekCalendar
-                    therapistName={selectedTherapistData.name}
-                    therapistId={selectedTherapistData.id}
-                    appointments={appointments || []}
-                    clients={clients || []}
-                    onAppointmentClick={handleAppointmentClick}
-                  />
-                ) : (
-                  <p>Select a therapist to view weekly calendar</p>
-                )
-              )}
-            </div>
-            <div>
-              <SimpleOccupancyGrid
-                therapists={therapists || []}
-                appointments={appointments || []}
-              />
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-      <AppointmentEditDialog
-        appointmentId={editingAppointmentId}
-        onClose={() => setEditingAppointmentId(null)}
-      />
-      <CreateAppointmentDialog
-        open={createDialogOpen}
-        initialTherapistId={createDialogContext.therapistId}
-        initialDate={createDialogContext.date}
-        onClose={() => {
-          setCreateDialogOpen(false);
-          setCreateDialogContext({});
-        }}
-      />
+        </div>
+      </div>
     </div>
   );
 }
