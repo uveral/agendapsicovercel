@@ -29,6 +29,7 @@ export default function Calendar3Page() {
     queryFn: getUsers,
   });
 
+  // Dummy comment to force a new commit
   const selectedTherapistData = therapists?.find(t => t.id === selectedTherapist); // Added optional chaining
 
   return (
