@@ -3,7 +3,7 @@
 import React, { useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Therapist, Appointment } from '@/lib/types';
-import { FixedSizeGrid } from 'react-window';
+
 
 
 interface SimpleOccupancyGridProps {
@@ -34,23 +34,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
     return map;
   }, [appointments]);
 
-  const columnWidth = width / therapists.length;
-  const rowHeight = height / hours.length;
 
-  const Cell = useCallback(({ columnIndex, rowIndex, style }: { columnIndex: number, rowIndex: number, style: React.CSSProperties }) => {
-    const therapist = therapists[columnIndex];
-    const hour = hours[rowIndex];
-    const key = `${therapist.id}-${hour}`;
-    const isOccupied = appointmentMap.has(key);
-
-    return (
-      <div style={style} className="flex items-center justify-center">
-        <div
-          className={`w-full h-full rounded-sm ${isOccupied ? 'bg-red-500' : 'bg-green-500'}`}
-        />
-      </div>
-    );
-  }, [therapists, hours, appointmentMap, columnWidth, rowHeight]);
 
   return (
     <Card>
@@ -64,16 +48,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
             ))}
         </div>
         <div style={{ width: '100%', height: 'calc(100% - 40px)' }}>
-            <FixedSizeGrid
-                columnCount={therapists.length}
-                columnWidth={columnWidth}
-                height={height}
-                rowCount={hours.length}
-                rowHeight={rowHeight}
-                width={width}
-            >
-                {Cell}
-            </FixedSizeGrid>
+            <p>Simple Occupancy Grid Placeholder</p>
         </div>
       </CardContent>
     </Card>
