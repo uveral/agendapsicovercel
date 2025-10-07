@@ -347,3 +347,18 @@
 [data-radix-portal] > div[style*="position: fixed"] {
   pointer-events: none !important;
 }
+
+/* Ensure header and sidebar trigger are always clickable */
+header,
+[data-testid="button-sidebar-toggle"],
+[data-sidebar="trigger"] {
+  position: relative;
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+header *,
+[data-testid="button-sidebar-toggle"] *,
+[data-sidebar="trigger"] * {
+  pointer-events: auto !important;
+}
