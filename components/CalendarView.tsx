@@ -128,7 +128,7 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
             itemData={{ appointmentsByDate }}
           >
             {Cell}
-          </Grid>
+          </FixedSizeGrid>
         </div>
       </CardContent>
     </Card>

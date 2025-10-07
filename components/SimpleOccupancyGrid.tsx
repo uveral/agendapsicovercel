@@ -72,7 +72,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
                 width={width}
             >
                 {Cell}
-            </Grid>
+            </FixedSizeGrid>
         </div>
       </CardContent>
     </Card>
