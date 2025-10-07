@@ -54,7 +54,11 @@ export async function POST(request: Request) {
   const body = await request.json();
 
   // Convert camelCase to snake_case for database
-  const dbBody = toSnakeCase({ ...body, role: 'client' });
+  // Note: After running fix-users-table.sql in Supabase, id will auto-generate
+  const dbBody = toSnakeCase({
+    ...body,
+    role: 'client'
+  });
 
   const { data: client, error } = await supabase
     .from('users')
