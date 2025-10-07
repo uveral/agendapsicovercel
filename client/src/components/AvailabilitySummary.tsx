@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Appointment, TherapistWorkingHours } from "@shared/schema";
@@ -25,92 +26,159 @@ export function AvailabilitySummary({
   appointments,
   showTherapistName = false 
 }: AvailabilitySummaryProps) {
-  const { data: schedule = [] } = useQuery<TherapistWorkingHours[]>({ 
-    queryKey: [`/api/therapists/${therapistId}/schedule`]
+  const { data: schedule = [] } = useQuery<TherapistWorkingHours[]>({
+    queryKey: [`/api/therapists/${therapistId}/schedule`],
+    enabled: Boolean(therapistId),
   });
 
-  const calculateFreeSlots = (): TimeSlot[] => {
-    if (!schedule || schedule.length === 0) return [];
-
-    const freeSlots: TimeSlot[] = [];
+  const { currentMonth, currentYear, datesByDayOfWeek } = useMemo(() => {
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const currentMonthValue = now.getMonth();
+    const currentYearValue = now.getFullYear();
+    const daysInMonth = new Date(currentYearValue, currentMonthValue + 1, 0).getDate();
 
-    schedule.forEach((workBlock) => {
-      const startHour = parseInt(workBlock.startTime.split(':')[0]);
-      const endHour = parseInt(workBlock.endTime.split(':')[0]);
-
-      for (let hour = startHour; hour < endHour; hour++) {
-        const hourStr = `${hour.toString().padStart(2, '0')}:00`;
-        
-        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-        const datesForDay: number[] = [];
-        
-        for (let day = 1; day <= daysInMonth; day++) {
-          const date = new Date(currentYear, currentMonth, day);
-          if (date.getDay() === workBlock.dayOfWeek) {
-            datesForDay.push(day);
-          }
-        }
-
-        const occupiedDates = appointments.filter((apt) => {
-          if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
-          
-          const aptDate = new Date(apt.date);
-          if (aptDate.getMonth() !== currentMonth || aptDate.getFullYear() !== currentYear) return false;
-          if (aptDate.getDay() !== workBlock.dayOfWeek) return false;
-          
-          const aptStartHour = parseInt(apt.startTime.split(':')[0]);
-          return aptStartHour === hour;
-        }).map(apt => new Date(apt.date).getDate());
-
-        const freeDates = datesForDay.filter(d => !occupiedDates.includes(d));
-
-        if (freeDates.length > 0) {
-          let frequency: 'Semanal' | 'Quincenal' | 'Puntual' = 'Puntual';
-          
-          if (freeDates.length >= 4) {
-            frequency = 'Semanal';
-          } else if (freeDates.length >= 2) {
-            frequency = 'Quincenal';
-          }
-
-          freeSlots.push({
-            day: dayNames[workBlock.dayOfWeek],
-            dayOfWeek: workBlock.dayOfWeek,
-            hour: hourStr,
-            isRecurring: freeDates.length > 1,
-            frequency
-          });
-        }
+    const dateMap = new Map<number, number[]>();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(currentYearValue, currentMonthValue, day);
+      const dayOfWeek = date.getDay();
+      if (!dateMap.has(dayOfWeek)) {
+        dateMap.set(dayOfWeek, []);
       }
-    });
+      dateMap.get(dayOfWeek)!.push(day);
+    }
 
-    freeSlots.sort((a, b) => {
+    return {
+      currentMonth: currentMonthValue,
+      currentYear: currentYearValue,
+      datesByDayOfWeek: dateMap,
+    };
+  }, []);
+
+  const therapistAppointments = useMemo(() => {
+    if (!appointments.length) {
+      return [];
+    }
+
+    return appointments.filter((apt) => {
+      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
+
+      const aptDate = new Date(apt.date);
+      return (
+        aptDate.getMonth() === currentMonth &&
+        aptDate.getFullYear() === currentYear
+      );
+    });
+  }, [appointments, therapistId, currentMonth, currentYear]);
+
+  const appointmentsByDayAndHour = useMemo(() => {
+    if (!therapistAppointments.length) {
+      return new Map<number, Map<number, Set<number>>>();
+    }
+
+    const map = new Map<number, Map<number, Set<number>>>();
+
+    for (const appointment of therapistAppointments) {
+      const aptDate = new Date(appointment.date);
+      const dayOfWeek = aptDate.getDay();
+      const dayOfMonth = aptDate.getDate();
+      const hour = parseInt(appointment.startTime.split(':')[0] ?? '0', 10) || 0;
+
+      if (!map.has(dayOfWeek)) {
+        map.set(dayOfWeek, new Map());
+      }
+
+      const hoursMap = map.get(dayOfWeek)!;
+      if (!hoursMap.has(hour)) {
+        hoursMap.set(hour, new Set());
+      }
+
+      hoursMap.get(hour)!.add(dayOfMonth);
+    }
+
+    return map;
+  }, [therapistAppointments]);
+
+  const normalizedSchedule = useMemo(() => {
+    if (!schedule.length) {
+      return [] as Array<TherapistWorkingHours & { startHour: number; endHour: number }>;
+    }
+
+    return schedule.map((workBlock) => {
+      const [startHourRaw] = workBlock.startTime.split(':');
+      const [endHourRaw] = workBlock.endTime.split(':');
+
+      return {
+        ...workBlock,
+        startHour: parseInt(startHourRaw ?? '0', 10) || 0,
+        endHour: parseInt(endHourRaw ?? '0', 10) || 0,
+      };
+    });
+  }, [schedule]);
+
+  const freeSlots = useMemo((): TimeSlot[] => {
+    if (!normalizedSchedule.length) {
+      return [];
+    }
+
+    const slots: TimeSlot[] = [];
+
+    for (const workBlock of normalizedSchedule) {
+      const workingDays = datesByDayOfWeek.get(workBlock.dayOfWeek) ?? [];
+      const hoursMap = appointmentsByDayAndHour.get(workBlock.dayOfWeek);
+
+      for (let hour = workBlock.startHour; hour < workBlock.endHour; hour++) {
+        const occupiedDays = hoursMap?.get(hour);
+        const freeDates = workingDays.filter((day) => !(occupiedDays?.has(day)));
+
+        if (!freeDates.length) {
+          continue;
+        }
+
+        let frequency: 'Semanal' | 'Quincenal' | 'Puntual' = 'Puntual';
+        if (freeDates.length >= 4) {
+          frequency = 'Semanal';
+        } else if (freeDates.length >= 2) {
+          frequency = 'Quincenal';
+        }
+
+        slots.push({
+          day: dayNames[workBlock.dayOfWeek],
+          dayOfWeek: workBlock.dayOfWeek,
+          hour: `${hour.toString().padStart(2, '0')}:00`,
+          isRecurring: freeDates.length > 1,
+          frequency,
+        });
+      }
+    }
+
+    slots.sort((a, b) => {
       if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
       return a.hour.localeCompare(b.hour);
     });
 
-    return freeSlots;
-  };
+    return slots;
+  }, [appointmentsByDayAndHour, datesByDayOfWeek, normalizedSchedule]);
 
-  const freeSlots = calculateFreeSlots();
+  const groupedArray = useMemo(() => {
+    if (!freeSlots.length) {
+      return [] as Array<TimeSlot & { hours: string[] }>;
+    }
 
-  if (freeSlots.length === 0) {
+    const groupedSlots = freeSlots.reduce((acc, slot) => {
+      const key = `${slot.day}-${slot.frequency}`;
+      if (!acc[key]) {
+        acc[key] = { ...slot, hours: [] };
+      }
+      acc[key].hours.push(slot.hour);
+      return acc;
+    }, {} as Record<string, TimeSlot & { hours: string[] }>);
+
+    return Object.values(groupedSlots);
+  }, [freeSlots]);
+
+  if (groupedArray.length === 0) {
     return null;
   }
-
-  const groupedSlots = freeSlots.reduce((acc, slot) => {
-    const key = `${slot.day}-${slot.frequency}`;
-    if (!acc[key]) {
-      acc[key] = { ...slot, hours: [] };
-    }
-    acc[key].hours.push(slot.hour);
-    return acc;
-  }, {} as Record<string, TimeSlot & { hours: string[] }>);
-
-  const groupedArray = Object.values(groupedSlots);
 
   return (
     <Card>
