@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
@@ -104,6 +105,20 @@ function AppContent() {
   };
 
   const { isAuthenticated, isLoading } = useAuth();
+
+  // Fix for Radix UI focus management interfering with sidebar
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      [data-radix-focus-guard] {
+        pointer-events: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   if (isLoading) {
     return (
