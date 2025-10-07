@@ -150,6 +150,13 @@ export function WeekCalendar({
     })
   ), [weekStart]);
 
+  // Format date as "DD/MM"
+  const formatDate = useCallback((date: Date): string => {
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return `${day}/${month}`;
+  }, []);
+
   const weekRangeLabel = useMemo(() => {
     if (!weekDates.length) {
       return "";
@@ -157,7 +164,7 @@ export function WeekCalendar({
     const start = weekDates[0];
     const end = weekDates[weekDates.length - 1];
     return `${formatDate(start)} - ${formatDate(end)}`;
-  }, [weekDates]);
+  }, [formatDate, weekDates]);
 
   const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -173,13 +180,6 @@ export function WeekCalendar({
   const goToCurrentWeek = useCallback(() => {
     setWeekOffset(0);
   }, []);
-
-  // Format date as "DD/MM"
-  const formatDate = (date: Date): string => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${day}/${month}`;
-  };
 
   // Find appointment for therapist at a specific time
   const getAppointment = (date: Date, hour: number): Appointment | undefined => {
