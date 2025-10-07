@@ -4,7 +4,6 @@
 import { Calendar, Users, UserCircle, LayoutDashboard, Clock, Settings, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +20,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 const menuItems = [
   {
@@ -55,14 +55,7 @@ export function AppSidebar() {
   const router = useRouter();
   const { toast } = useToast();
   const supabase = createClient();
-
-  const { data: user } = useQuery({
-    queryKey: ['user'],
-    queryFn: async () => {
-      const { data } = await supabase.from('users').select('*').single();
-      return data;
-    },
-  });
+  const { user } = useAuth();
 
   const isAdmin = user?.role === 'admin';
 
@@ -128,12 +121,12 @@ export function AppSidebar() {
             <div className="flex items-center gap-2 text-sm">
               <Avatar className="h-8 w-8">
                 <AvatarFallback>
-                  {user.first_name?.[0]}{user.last_name?.[0]}
+                  {user.firstName?.[0]}{user.lastName?.[0]}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
                 <span className="font-medium">
-                  {user.first_name} {user.last_name}
+                  {user.firstName} {user.lastName}
                 </span>
                 <span className="text-xs text-muted-foreground capitalize">
                   {user.role}
