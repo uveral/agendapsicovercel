@@ -9,6 +9,7 @@ import { AvailabilitySummary } from "@/components/AvailabilitySummary";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 import { useAuth } from "@/hooks/useAuth";
+import { RenderDetector } from "@/components/RenderDetector";
 import {
   Select,
   SelectContent,
@@ -100,6 +101,7 @@ function CalendarContent() {
   }
 
   return (
+    <RenderDetector name="CalendarPage">
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -141,21 +143,24 @@ function CalendarContent() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-6">
-          <OccupancyGrid
-            therapists={therapists}
-            appointments={appointments}
-            onAppointmentClick={(id) => setEditingAppointmentId(id)}
-          />
+          <RenderDetector name="OccupancyGrid">
+            <OccupancyGrid
+              therapists={therapists}
+              appointments={appointments}
+              onAppointmentClick={(id) => setEditingAppointmentId(id)}
+            />
+          </RenderDetector>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {therapists.map((therapist) => (
-              <AvailabilitySummary
-                key={therapist.id}
-                therapistId={therapist.id}
-                therapistName={therapist.name}
-                appointments={appointments}
-                showTherapistName={true}
-              />
+              <RenderDetector key={therapist.id} name={`AvailabilitySummary-${therapist.id}`}>
+                <AvailabilitySummary
+                  therapistId={therapist.id}
+                  therapistName={therapist.name}
+                  appointments={appointments}
+                  showTherapistName={true}
+                />
+              </RenderDetector>
             ))}
           </div>
         </TabsContent>
@@ -253,6 +258,7 @@ function CalendarContent() {
         }}
       />
     </div>
+    </RenderDetector>
   );
 }
 

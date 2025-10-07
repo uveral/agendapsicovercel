@@ -23,7 +23,8 @@
       "Bash(node:*)",
       "Bash(grep:*)",
       "Bash(gh api:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(tail:*)"
     ],
     "deny": [],
     "ask": []
