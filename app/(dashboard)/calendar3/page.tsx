@@ -1,20 +1,21 @@
+
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Therapist, Appointment, User } from '@/lib/types';
+import { TherapistSelector } from '@/components/TherapistSelector';
+import { CalendarView } from '@/components/CalendarView';
 
 export default function Calendar3() {
+  const [selectedTherapist, setSelectedTherapist] = useState('all');
+
   const { data: therapists = [], isLoading: isLoadingTherapists } = useQuery<Therapist[]>({
     queryKey: ["/api/therapists"],
   });
 
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
-  });
-
-  const { data: clients = [] } = useQuery<User[]>({
-    queryKey: ["/api/clients"],
   });
 
   if (isLoadingTherapists) {
@@ -27,10 +28,17 @@ export default function Calendar3() {
   }
 
   return (
-    <div>
-      <h1>Calendario 3</h1>
-      <p>Datos cargados!</p>
-      <pre>{JSON.stringify({ therapists, appointments, clients }, null, 2)}</pre>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">Calendario 3</h1>
+      <TherapistSelector
+        therapists={therapists}
+        selectedTherapist={selectedTherapist}
+        onSelectTherapist={setSelectedTherapist}
+      />
+      <CalendarView
+        appointments={appointments}
+        selectedTherapist={selectedTherapist}
+      />
     </div>
   );
 }
