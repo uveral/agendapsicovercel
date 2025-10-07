@@ -58,35 +58,6 @@ export function WeekCalendar({
     return `${year}-${month}-${day}`;
   };
 
-  const appointmentsBySlot = useMemo(() => {
-    const map = new Map<string, Appointment>();
-
-    for (const appointment of appointments) {
-      if (appointment.therapistId !== therapistId || appointment.status === "cancelled") {
-        continue;
-      }
-
-      const appointmentDate = new Date(appointment.date);
-      const dateKey = formatDateKey(appointmentDate);
-      const [startHour] = appointment.startTime.split(":").map(Number);
-      const [endHour] = appointment.endTime.split(":").map(Number);
-
-      for (let hour = startHour; hour < endHour; hour++) {
-        map.set(`${dateKey}-${hour}`, appointment);
-      }
-    }
-
-    return map;
-  }, [appointments, therapistId]);
-
-  const clientsById = useMemo(() => {
-    const map = new Map<string, User>();
-    for (const client of clients) {
-      map.set(client.id, client);
-    }
-    return map;
-  }, [clients]);
-  
   // Calculate the Monday of the current week based on offset
   const getWeekStart = (offset: number): Date => {
     const now = new Date();
@@ -98,14 +69,54 @@ export function WeekCalendar({
     return monday;
   };
 
-  const weekStart = getWeekStart(weekOffset);
+  const weekStart = useMemo(() => getWeekStart(weekOffset), [weekOffset]);
+
+  const weekEnd = useMemo(() => {
+    const end = new Date(weekStart);
+    end.setDate(weekStart.getDate() + 7);
+    return end;
+  }, [weekStart]);
+
+  const appointmentsBySlot = useMemo(() => {
+    const map = new Map<string, Appointment>();
+
+    for (const appointment of appointments) {
+      if (appointment.therapistId !== therapistId || appointment.status === "cancelled") {
+        continue;
+      }
+
+      const appointmentDate = new Date(appointment.date);
+      if (appointmentDate < weekStart || appointmentDate >= weekEnd) {
+        continue;
+      }
+      const dateKey = formatDateKey(appointmentDate);
+      const [startHour] = appointment.startTime.split(":").map(Number);
+      const [endHour] = appointment.endTime.split(":").map(Number);
+
+      for (let hour = startHour; hour < endHour; hour++) {
+        map.set(`${dateKey}-${hour}`, appointment);
+      }
+    }
+
+    return map;
+  }, [appointments, therapistId, weekEnd, weekStart]);
+
+  const clientsById = useMemo(() => {
+    const map = new Map<string, User>();
+    for (const client of clients) {
+      map.set(client.id, client);
+    }
+    return map;
+  }, [clients]);
   
   // Generate array of 7 days starting from Monday
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + i);
-    return date;
-  });
+  const weekDates = useMemo(() => (
+    Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + i);
+      return date;
+    })
+  ), [weekStart]);
 
   const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
