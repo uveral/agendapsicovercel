@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,13 +19,13 @@ export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: 
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
-  const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
-  
+  const hours = useMemo(() => Array.from({ length: 12 }, (_, i) => 9 + i), []); // 9:00 to 20:00
+
   // Calculate days in the current month
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const monthDates = Array.from({ length: daysInMonth }, (_, i) => {
+  const monthDates = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => {
     return new Date(currentYear, currentMonth, i + 1);
-  });
+  }), [currentYear, currentMonth, daysInMonth]);
 
   // Month names in Spanish
   const monthNames = [
@@ -58,22 +58,32 @@ export function OccupancyGrid({ therapists, appointments, onAppointmentClick }: 
     setCurrentYear(now.getFullYear());
   };
 
-  // Find appointment for a therapist at a specific time
-  const getAppointment = (therapistId: string, date: Date, hour: number): Appointment | undefined => {
-    return appointments.find((apt) => {
-      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
-      
+  // Create a fast lookup map for appointments: "therapistId-dateString-hour" -> Appointment
+  const appointmentMap = useMemo(() => {
+    const map = new Map<string, Appointment>();
+
+    appointments.forEach((apt) => {
+      if (apt.status === "cancelled") return;
+
       const aptDate = new Date(apt.date);
-      const isSameDay = aptDate.toDateString() === date.toDateString();
-      
-      if (!isSameDay) return false;
-      
-      // Parse start and end times
+      const dateString = aptDate.toDateString();
       const [startHour] = apt.startTime.split(':').map(Number);
       const [endHour] = apt.endTime.split(':').map(Number);
-      
-      return hour >= startHour && hour < endHour;
+
+      // Store appointment for each hour it spans
+      for (let hour = startHour; hour < endHour; hour++) {
+        const key = `${apt.therapistId}-${dateString}-${hour}`;
+        map.set(key, apt);
+      }
     });
+
+    return map;
+  }, [appointments]);
+
+  // Fast appointment lookup using the map
+  const getAppointment = (therapistId: string, date: Date, hour: number): Appointment | undefined => {
+    const key = `${therapistId}-${date.toDateString()}-${hour}`;
+    return appointmentMap.get(key);
   };
 
   return (

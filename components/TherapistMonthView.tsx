@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,21 +92,45 @@ export function TherapistMonthView({
     setCurrentYear(now.getFullYear());
   };
 
-  const getAppointmentsForDay = (date: Date): Appointment[] => {
-    return appointments.filter((apt) => {
-      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
-      
+  // Create a fast lookup map for appointments by date
+  const appointmentsByDate = useMemo(() => {
+    const map = new Map<string, Appointment[]>();
+
+    appointments.forEach((apt) => {
+      if (apt.therapistId !== therapistId || apt.status === "cancelled") return;
+
       const aptDate = new Date(apt.date);
-      return aptDate.toDateString() === date.toDateString();
-    }).sort((a, b) => {
-      return a.startTime.localeCompare(b.startTime);
+      const dateString = aptDate.toDateString();
+
+      const dayAppointments = map.get(dateString) || [];
+      dayAppointments.push(apt);
+      map.set(dateString, dayAppointments);
     });
+
+    // Sort appointments by time for each day
+    map.forEach((appointments, date) => {
+      appointments.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    });
+
+    return map;
+  }, [appointments, therapistId]);
+
+  // Create a fast lookup map for client names
+  const clientNames = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const name = `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
+      map.set(client.id, name);
+    });
+    return map;
+  }, [clients]);
+
+  const getAppointmentsForDay = (date: Date): Appointment[] => {
+    return appointmentsByDate.get(date.toDateString()) || [];
   };
 
   const getClientName = (appointment: Appointment): string => {
-    const client = clients.find((c) => c.id === appointment.clientId);
-    if (!client) return 'Cliente';
-    return `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
+    return clientNames.get(appointment.clientId) || 'Cliente';
   };
 
   const isToday = (date: Date): boolean => {

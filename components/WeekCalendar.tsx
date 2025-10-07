@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,29 +100,47 @@ export function WeekCalendar({
     return `${formatDate(start)} - ${formatDate(end)}`;
   };
 
-  // Find appointment for therapist at a specific time
-  const getAppointment = (date: Date, hour: number): Appointment | undefined => {
-    return appointments.find((apt) => {
-      if (apt.therapistId !== therapistId || apt.status === "cancelled") return false;
-      
+  // Create a fast lookup map for appointments: "dateString-hour" -> Appointment
+  const appointmentMap = useMemo(() => {
+    const map = new Map<string, Appointment>();
+
+    appointments.forEach((apt) => {
+      if (apt.therapistId !== therapistId || apt.status === "cancelled") return;
+
       const aptDate = new Date(apt.date);
-      const isSameDay = aptDate.toDateString() === date.toDateString();
-      
-      if (!isSameDay) return false;
-      
-      // Parse start and end times
+      const dateString = aptDate.toDateString();
       const [startHour] = apt.startTime.split(':').map(Number);
       const [endHour] = apt.endTime.split(':').map(Number);
-      
-      return hour >= startHour && hour < endHour;
+
+      // Store appointment for each hour it spans
+      for (let hour = startHour; hour < endHour; hour++) {
+        const key = `${dateString}-${hour}`;
+        map.set(key, apt);
+      }
     });
+
+    return map;
+  }, [appointments, therapistId]);
+
+  // Create a fast lookup map for client names
+  const clientNames = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const name = `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
+      map.set(client.id, name);
+    });
+    return map;
+  }, [clients]);
+
+  // Fast appointment lookup using the map
+  const getAppointment = (date: Date, hour: number): Appointment | undefined => {
+    const key = `${date.toDateString()}-${hour}`;
+    return appointmentMap.get(key);
   };
 
   // Get client name from appointment
   const getClientName = (appointment: Appointment): string => {
-    const client = clients.find((c) => c.id === appointment.clientId);
-    if (!client) return 'Cliente';
-    return `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
+    return clientNames.get(appointment.clientId) || 'Cliente';
   };
 
   // Check if a date is today

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Appointment, TherapistWorkingHours } from "@/lib/types";
@@ -32,7 +33,7 @@ export function AvailabilitySummary({
     enabled: !!therapistId,
   });
 
-  const calculateFreeSlots = (): TimeSlot[] => {
+  const freeSlots = useMemo((): TimeSlot[] => {
     if (!schedule || schedule.length === 0) return [];
 
     const freeSlots: TimeSlot[] = [];
@@ -96,9 +97,7 @@ export function AvailabilitySummary({
     });
 
     return freeSlots;
-  };
-
-  const freeSlots = calculateFreeSlots();
+  }, [schedule, appointments, therapistId]);
 
   if (freeSlots.length === 0) {
     return null;
