@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -32,16 +31,19 @@ export function SimpleWeekCalendar({ therapistName, therapistId, appointments, c
 
   const weekDays = getWeekDays(currentDate);
 
-  const appointmentsByDate = new Map<string, Appointment[]>();
-  appointments.forEach((apt) => {
-    if (therapistId === 'all' || apt.therapistId === therapistId) {
-        const date = new Date(apt.date).toDateString();
-        if (!appointmentsByDate.has(date)) {
-            appointmentsByDate.set(date, []);
-        }
-        appointmentsByDate.get(date)?.push(apt);
-    }
-  });
+  const appointmentsByDate = useMemo(() => {
+    const map = new Map<string, Appointment[]>();
+    appointments.forEach((apt) => {
+      if (therapistId === 'all' || apt.therapistId === therapistId) {
+          const date = new Date(apt.date).toDateString();
+          if (!map.has(date)) {
+              map.set(date, []);
+          }
+          map.get(date)?.push(apt);
+      }
+    });
+    return map;
+  }, [appointments, therapistId]);
 
   const goToPreviousWeek = () => {
     const newDate = new Date(currentDate);
