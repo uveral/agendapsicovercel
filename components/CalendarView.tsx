@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Appointment } from '@/lib/types';
 import { FixedSizeGrid } from 'react-window';
-import useResizeObserver from 'use-resize-observer';
+
 
 interface CalendarViewProps {
   appointments: Appointment[];
@@ -36,7 +36,8 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  const { ref, width = 1, height = 1 } = useResizeObserver<HTMLDivElement>();
+  const width = 800;
+  const height = 600;
 
   const calendarGrid = useMemo(() => getCalendarGrid(currentYear, currentMonth), [currentYear, currentMonth]);
 
@@ -117,7 +118,7 @@ export function CalendarView({ appointments, selectedTherapist }: CalendarViewPr
             <div key={day} className="text-center font-semibold">{day}</div>
           ))}
         </div>
-        <div ref={ref} style={{ width: '100%', height: 'calc(100% - 40px)' }}>
+        <div style={{ width: '100%', height: 'calc(100% - 40px)' }}>
           <FixedSizeGrid
             columnCount={7}
             columnWidth={columnWidth}

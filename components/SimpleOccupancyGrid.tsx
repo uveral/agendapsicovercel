@@ -4,7 +4,7 @@ import React, { useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Therapist, Appointment } from '@/lib/types';
 import { FixedSizeGrid } from 'react-window';
-import useResizeObserver from 'use-resize-observer';
+
 
 interface SimpleOccupancyGridProps {
   therapists: Therapist[];
@@ -12,7 +12,8 @@ interface SimpleOccupancyGridProps {
 }
 
 export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupancyGridProps) {
-  const { ref, width = 1, height = 1 } = useResizeObserver<HTMLDivElement>();
+  const width = 800;
+  const height = 600;
   const hours = Array.from({ length: 12 }, (_, i) => 9 + i); // 9:00 to 20:00
   const today = new Date();
 
@@ -62,7 +63,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
                 <div key={therapist.id} className="text-center font-semibold">{therapist.name}</div>
             ))}
         </div>
-        <div ref={ref} style={{ width: '100%', height: 'calc(100% - 40px)' }}>
+        <div style={{ width: '100%', height: 'calc(100% - 40px)' }}>
             <FixedSizeGrid
                 columnCount={therapists.length}
                 columnWidth={columnWidth}
