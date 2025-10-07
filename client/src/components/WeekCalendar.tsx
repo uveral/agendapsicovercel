@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,14 @@ interface WeekCalendarProps {
   clients: User[];
   onAppointmentClick?: (appointmentId: string) => void;
 }
+
+type NormalizedAppointment = {
+  appointment: Appointment;
+  dateKey: string;
+  dayStart: number;
+  startHour: number;
+  endHour: number;
+};
 
 const calculateHourRange = (schedule: TherapistWorkingHours[]): number[] => {
   if (!schedule || schedule.length === 0) {
@@ -41,11 +49,15 @@ export function WeekCalendar({
 }: WeekCalendarProps) {
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const { data: schedule } = useQuery<TherapistWorkingHours[]>({ 
-    queryKey: ['/api/therapists', therapistId, 'schedule'] 
+  const { data: schedule } = useQuery<TherapistWorkingHours[]>({
+    queryKey: ['/api/therapists', therapistId, 'schedule'],
+    enabled: Boolean(therapistId),
   });
 
-  const hours = calculateHourRange(schedule || []);
+  const hours = useMemo(
+    () => calculateHourRange(schedule || []),
+    [schedule],
+  );
 
   const formatDateKey = (date: Date) => {
     const year = date.getFullYear();
@@ -73,6 +85,62 @@ export function WeekCalendar({
     return end;
   }, [weekStart]);
 
+  const normalizedAppointments = useMemo<NormalizedAppointment[]>(() => {
+    if (!appointments.length) {
+      return [];
+    }
+
+    return appointments
+      .filter((appointment) => appointment.therapistId === therapistId && appointment.status !== "cancelled")
+      .map((appointment) => {
+        const appointmentDate = new Date(appointment.date);
+        appointmentDate.setHours(0, 0, 0, 0);
+
+        const [startHour] = appointment.startTime.split(":").map((value) => parseInt(value, 10) || 0);
+        const [endHour] = appointment.endTime.split(":").map((value) => parseInt(value, 10) || 0);
+
+        return {
+          appointment,
+          dateKey: formatDateKey(appointmentDate),
+          dayStart: appointmentDate.getTime(),
+          startHour,
+          endHour,
+        };
+      });
+  }, [appointments, therapistId]);
+
+  const appointmentsBySlot = useMemo(() => {
+    const map = new Map<string, Appointment>();
+
+    if (!normalizedAppointments.length) {
+      return map;
+    }
+
+    const weekStartTime = weekStart.getTime();
+    const weekEndTime = weekEnd.getTime();
+
+    for (const item of normalizedAppointments) {
+      if (item.dayStart < weekStartTime || item.dayStart >= weekEndTime) {
+        continue;
+      }
+
+      const slotEndHour = Math.max(item.startHour, item.endHour);
+      for (let hour = item.startHour; hour < slotEndHour; hour++) {
+        map.set(`${item.dateKey}-${hour}`, item.appointment);
+      }
+    }
+
+    return map;
+  }, [normalizedAppointments, weekEnd, weekStart]);
+
+  const clientsById = useMemo(() => {
+    const map = new Map<string, User>();
+    for (const client of clients) {
+      map.set(client.id, client);
+    }
+    return map;
+  }, [clients]);
+
   // Generate array of 7 days starting from Monday
   const weekDates = useMemo(() => (
     Array.from({ length: 7 }, (_, i) => {
@@ -82,20 +150,29 @@ export function WeekCalendar({
     })
   ), [weekStart]);
 
+  const weekRangeLabel = useMemo(() => {
+    if (!weekDates.length) {
+      return "";
+    }
+    const start = weekDates[0];
+    const end = weekDates[weekDates.length - 1];
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  }, [weekDates]);
+
   const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
   // Navigation functions
-  const goToPreviousWeek = () => {
-    setWeekOffset(weekOffset - 1);
-  };
+  const goToPreviousWeek = useCallback(() => {
+    setWeekOffset((offset) => offset - 1);
+  }, []);
 
-  const goToNextWeek = () => {
-    setWeekOffset(weekOffset + 1);
-  };
+  const goToNextWeek = useCallback(() => {
+    setWeekOffset((offset) => offset + 1);
+  }, []);
 
-  const goToCurrentWeek = () => {
+  const goToCurrentWeek = useCallback(() => {
     setWeekOffset(0);
-  };
+  }, []);
 
   // Format date as "DD/MM"
   const formatDate = (date: Date): string => {
@@ -104,52 +181,12 @@ export function WeekCalendar({
     return `${day}/${month}`;
   };
 
-  // Get week range as string
-  const getWeekRangeString = (): string => {
-    const start = weekDates[0];
-    const end = weekDates[6];
-    return `${formatDate(start)} - ${formatDate(end)}`;
-  };
-
   // Find appointment for therapist at a specific time
-  const appointmentsBySlot = useMemo(() => {
-    const map = new Map<string, Appointment>();
-
-    for (const appointment of appointments) {
-      if (appointment.therapistId !== therapistId || appointment.status === "cancelled") {
-        continue;
-      }
-
-      const appointmentDate = new Date(appointment.date);
-      if (appointmentDate < weekStart || appointmentDate >= weekEnd) {
-        continue;
-      }
-
-      const dateKey = formatDateKey(appointmentDate);
-      const [startHour] = appointment.startTime.split(":").map(Number);
-      const [endHour] = appointment.endTime.split(":").map(Number);
-
-      for (let hour = startHour; hour < endHour; hour++) {
-        map.set(`${dateKey}-${hour}`, appointment);
-      }
-    }
-
-    return map;
-  }, [appointments, therapistId, weekEnd, weekStart]);
-
   const getAppointment = (date: Date, hour: number): Appointment | undefined => {
     return appointmentsBySlot.get(`${formatDateKey(date)}-${hour}`);
   };
 
   // Get client name from appointment
-  const clientsById = useMemo(() => {
-    const map = new Map<string, User>();
-    for (const client of clients) {
-      map.set(client.id, client);
-    }
-    return map;
-  }, [clients]);
-
   const getClientName = (appointment: Appointment): string => {
     const client = clientsById.get(appointment.clientId ?? "");
     if (!client) return 'Cliente';
@@ -157,10 +194,11 @@ export function WeekCalendar({
   };
 
   // Check if a date is today
-  const isToday = (date: Date): boolean => {
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
-  };
+  const todayString = useMemo(() => new Date().toDateString(), []);
+
+  const isToday = useCallback((date: Date): boolean => {
+    return date.toDateString() === todayString;
+  }, [todayString]);
 
   return (
     <Card>
@@ -177,7 +215,7 @@ export function WeekCalendar({
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <div className="text-sm font-medium min-w-[180px] text-center">
-              {getWeekRangeString()}
+              {weekRangeLabel}
             </div>
             <Button
               variant="outline"
