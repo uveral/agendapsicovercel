@@ -1,6 +1,7 @@
 
 'use client';
 
+import React from 'react';
 import { Calendar, Users, UserCircle, LayoutDashboard, Clock, Settings, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -57,6 +58,13 @@ export function AppSidebar() {
   const { user } = useAuth();
 
   const isAdmin = user?.role === 'admin';
+
+  // Debug: Log every render
+  const renderCount = React.useRef(0);
+  renderCount.current++;
+  if (renderCount.current > 10) {
+    console.error('[AppSidebar] TOO MANY RENDERS:', renderCount.current);
+  }
 
   const handleLogout = async () => {
     const supabase = createClient();

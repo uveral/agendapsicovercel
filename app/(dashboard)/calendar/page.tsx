@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo } from "react";
+import React, { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
@@ -25,6 +25,13 @@ function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+
+  // Debug: Log every render
+  const renderCountRef = React.useRef(0);
+  renderCountRef.current++;
+  if (renderCountRef.current > 10) {
+    console.error('[CalendarContent] TOO MANY RENDERS:', renderCountRef.current);
+  }
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
