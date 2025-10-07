@@ -4,8 +4,8 @@ import React, { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
-import { OccupancyGrid } from "@/components/OccupancyGrid";
-import { AvailabilitySummary } from "@/components/AvailabilitySummary";
+import { DayOccupancyGrid } from "@/components/DayOccupancyGrid";
+import { DayAvailabilitySummary } from "@/components/DayAvailabilitySummary";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,11 +21,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { Therapist, Appointment, User } from "@/lib/types";
+import { Calendar } from "@/components/ui/calendar";
 
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
@@ -143,26 +146,26 @@ function CalendarContent() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-6">
-          <RenderDetector name="OccupancyGrid">
-            <OccupancyGrid
-              therapists={therapists}
-              appointments={appointments}
-              onAppointmentClick={(id) => setEditingAppointmentId(id)}
-            />
-          </RenderDetector>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {therapists.map((therapist) => (
-              <RenderDetector key={therapist.id} name={`AvailabilitySummary-${therapist.id}`}>
-                <AvailabilitySummary
-                  therapistId={therapist.id}
-                  therapistName={therapist.name}
-                  appointments={appointments}
-                  showTherapistName={true}
+            <div className="flex gap-4">
+                <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    className="rounded-md border"
                 />
-              </RenderDetector>
-            ))}
-          </div>
+                <div className="flex-1 space-y-4">
+                    <DayOccupancyGrid
+                        therapists={therapists}
+                        appointments={appointments}
+                        selectedDate={selectedDate || new Date()}
+                        onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                    />
+                    <DayAvailabilitySummary
+                        appointments={appointments}
+                        selectedDate={selectedDate || new Date()}
+                    />
+                </div>
+            </div>
         </TabsContent>
 
         <TabsContent value="individual" className="space-y-6 mt-6">
@@ -207,12 +210,6 @@ function CalendarContent() {
                   onAppointmentClick={(id) => setEditingAppointmentId(id)}
                 />
               )}
-
-              <AvailabilitySummary
-                therapistId={selectedTherapist}
-                appointments={appointments}
-                showTherapistName={false}
-              />
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
