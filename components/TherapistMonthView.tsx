@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
