@@ -75,7 +75,7 @@ export default function Calendar() {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
     }
-  }, [therapistParam, selectedTherapist]);
+  }, [therapistParam]); // Removed selectedTherapist to prevent infinite loop
 
   const therapistsList = [
     { id: "all", name: "Todos los terapeutas" },
