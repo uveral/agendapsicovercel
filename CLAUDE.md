@@ -11,7 +11,7 @@ AgendaPsico is a psychology clinic scheduling management system built for Centro
 - **Frontend**: React 18 + TypeScript + Vite + Wouter (routing) + TanStack Query
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Neon (serverless) with Drizzle ORM
-- **Auth**: Replit Auth (passport-based session authentication)
+- **Auth**: Simple session-based authentication (no Replit dependencies)
 - **UI**: Radix UI + Tailwind CSS + shadcn/ui components
 - **PDF Generation**: jsPDF + jsPDF-autoTable
 
@@ -30,7 +30,7 @@ server/          # Express backend
   routes.ts      # All API route definitions
   storage.ts     # Database operations layer (IStorage interface)
   db.ts          # Drizzle database connection
-  replitAuth.ts  # Authentication middleware
+  mockAuth.ts    # Simple authentication middleware
   vite.ts        # Vite dev server integration
 shared/          # Code shared between client and server
   schema.ts      # Drizzle schemas + Zod validation schemas
@@ -48,11 +48,14 @@ shared/          # Code shared between client and server
 - Schema changes require running `npm run db:push` to sync with database
 
 ### Authentication & Authorization
-- Uses Replit Auth with session-based authentication
+- Uses simple session-based authentication (PostgreSQL session store)
+- Login via email (POST /api/login with { email })
+- First user and emails with "admin@" prefix automatically get admin role
 - Three user roles: `admin`, `therapist`, `client`
 - Middleware: `isAuthenticated`, `isAdmin`, `canManageAppointment` (defined in `server/routes.ts`)
 - Users table stores role and optional `therapistId` (links user accounts to therapist records)
 - Role switching is allowed ONLY in development mode (NODE_ENV=development or ALLOW_ROLE_SWITCHING=true)
+- Session secret defaults to "dev-secret-key-change-in-production" if SESSION_SECRET env var not set
 
 ### Key Data Models
 - **Users**: Auth users with roles (admin/therapist/client), linked to therapist records via `therapistId`
@@ -111,7 +114,7 @@ Full design guidelines are in `design_guidelines.md`.
 
 All API routes are defined in `server/routes.ts`. Key patterns:
 
-- **Auth routes**: `/api/auth/user`, `/api/auth/user/role`
+- **Auth routes**: `/api/login` (POST), `/api/logout` (POST), `/api/auth/user`, `/api/auth/user/role`
 - **Resource CRUD**: `/api/therapists`, `/api/clients`, `/api/appointments`
 - **Nested resources**: `/api/therapists/:id/appointments`, `/api/clients/:id/appointments`
 - **Working hours**: `/api/therapists/:id/schedule`
@@ -152,7 +155,9 @@ Authorization:
 - **Database Required**: Must have `DATABASE_URL` env var set to Neon PostgreSQL connection string
 - **Port**: Always uses PORT env var (default 5000) - other ports are firewalled in production
 - **Session Storage**: Uses PostgreSQL for session storage (table: `sessions`)
+- **Session Secret**: Set SESSION_SECRET env var for production (defaults to "dev-secret-key-change-in-production")
 - **Logo Handling**: SVG logo is converted to PNG for PDF generation using Sharp (see `getLogoPNGDataURI()` in routes.ts)
+- **No Replit Dependencies**: System no longer requires REPLIT_DOMAINS, REPL_ID, or other Replit-specific env vars
 
 ## Testing Appointments Logic
 

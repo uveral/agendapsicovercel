@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin } from "./mockAuth";
 import { insertTherapistSchema, insertClientAvailabilitySchema, insertAppointmentSchema, insertManualClientSchema, updateClientSchema, insertTherapistWorkingHoursSchema } from "@shared/schema";
 import { z } from "zod";
 import { jsPDF } from 'jspdf';
@@ -13,8 +13,14 @@ import path from 'path';
 
 const canManageAppointment = async (req: any, res: Response, next: NextFunction) => {
   try {
-    const user = await storage.getUser(req.user.claims.sub);
-    
+    const userId = req.session?.userId || req.user?.claims?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const user = await storage.getUser(userId);
+
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
@@ -70,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session?.userId || req.user?.claims?.sub;
       const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
@@ -82,13 +88,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/auth/user/role', isAuthenticated, async (req: any, res) => {
     // Role switching requires explicit ALLOW_ROLE_SWITCHING=true (for testing only)
     const allowRoleSwitching = process.env.ALLOW_ROLE_SWITCHING === 'true' || process.env.NODE_ENV === 'development';
-    
+
     if (!allowRoleSwitching) {
       return res.status(403).json({ message: "Role switching is not allowed" });
     }
-    
+
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session?.userId || req.user?.claims?.sub;
       const { role } = req.body;
       
       if (!role || (role !== 'admin' && role !== 'therapist' && role !== 'client')) {

@@ -21,6 +21,7 @@ import Appointments from "@/pages/Appointments";
 import Availability from "@/pages/Availability";
 import Settings from "@/pages/Settings";
 import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import type { User } from "@shared/schema";
 
@@ -74,7 +75,10 @@ function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
   return (
     <Switch>
       {!isAuthenticated ? (
-        <Route path="/" component={Landing} />
+        <>
+          <Route path="/" component={Login} />
+          <Route path="/landing" component={Landing} />
+        </>
       ) : (
         <>
           <Route path="/" component={Dashboard} />
