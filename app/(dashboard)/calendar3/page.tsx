@@ -3,9 +3,7 @@
 import React, { useState } from 'react';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import type { Appointment, Therapist, User } from '@/lib/types';
-import { getAppointments } from '@/lib/api/appointments';
-import { getTherapists } from '@/lib/api/therapists';
-import { getUsers } from '@/lib/api/users';
+import { getAppointments, getTherapists, getUsers } from '@/lib/api';
 import { CalendarView } from '@/components/CalendarView';
 import { TherapistSelector } from '@/components/TherapistSelector';
 import { SimpleOccupancyGrid } from '@/components/SimpleOccupancyGrid';
