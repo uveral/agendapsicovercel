@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
@@ -34,33 +34,39 @@ export default function Appointments() {
     queryKey: ["/api/clients"],
   });
 
-  const appointmentsWithDetails = appointments.map((apt) => {
-    const therapist = therapists.find((t) => t.id === apt.therapistId);
-    const client = clients.find((c) => c.id === apt.clientId);
-    const date = new Date(apt.date);
-    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const appointmentsWithDetails = useMemo(() => {
+    return appointments.map((apt) => {
+      const therapist = therapists.find((t) => t.id === apt.therapistId);
+      const client = clients.find((c) => c.id === apt.clientId);
+      const date = new Date(apt.date);
+      const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
-    return {
-      ...apt,
-      clientName: client
-        ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente'
-        : 'Cliente desconocido',
-      therapistName: therapist?.name || 'Terapeuta desconocido',
-      dateFormatted: `${dayNames[date.getDay()]} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`,
-    };
-  });
+      return {
+        ...apt,
+        clientName: client
+          ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente'
+          : 'Cliente desconocido',
+        therapistName: therapist?.name || 'Terapeuta desconocido',
+        dateFormatted: `${dayNames[date.getDay()]} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`,
+      };
+    });
+  }, [appointments, therapists, clients]);
 
-  const filteredAppointments = appointmentsWithDetails.filter((apt) => {
-    const matchesSearch =
-      apt.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      apt.therapistName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === "all" || apt.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredAppointments = useMemo(() => {
+    return appointmentsWithDetails.filter((apt) => {
+      const matchesSearch =
+        apt.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        apt.therapistName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = filterStatus === "all" || apt.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [appointmentsWithDetails, searchQuery, filterStatus]);
 
-  const confirmedCount = appointments.filter((a) => a.status === "confirmed").length;
-  const pendingCount = appointments.filter((a) => a.status === "pending").length;
-  const cancelledCount = appointments.filter((a) => a.status === "cancelled").length;
+  const { confirmedCount, pendingCount, cancelledCount } = useMemo(() => ({
+    confirmedCount: appointments.filter((a) => a.status === "confirmed").length,
+    pendingCount: appointments.filter((a) => a.status === "pending").length,
+    cancelledCount: appointments.filter((a) => a.status === "cancelled").length,
+  }), [appointments]);
 
   if (isLoading) {
     return (
