@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -99,13 +100,7 @@ export default function Calendar3() {
                         selectedTherapist={selectedTherapist}
                     />
                 ) : (
-                    <SimpleWeekCalendar
-                        therapistName={therapists.find((t) => t.id === selectedTherapist)?.name || ''}
-                        therapistId={selectedTherapist}
-                        appointments={appointments}
-                        clients={clients}
-                        onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                    />
+                    <SimpleWeekCalendar />
                 )}
                 </div>
             ) : (
