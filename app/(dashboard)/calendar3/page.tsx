@@ -58,11 +58,11 @@ export default function Calendar3Page() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           {calendarView === 'monthly' ? (
-            <CalendarView
-              appointments={appointments || []}
-              selectedTherapist={selectedTherapist}
-            />
-          ) : (
+                          <CalendarView
+                            appointments={appointments || []}
+                            selectedTherapist={selectedTherapist}
+                            clients={clients || []}
+                          />          ) : (
             selectedTherapistData ? (
               <CalendarView // Render CalendarView for weekly view as well
                 appointments={appointments || []}

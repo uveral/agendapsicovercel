@@ -4,13 +4,14 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Appointment } from '@/lib/types';
+import type { Appointment, User } from '@/lib/types';
 import { FixedSizeGrid } from 'react-window';
 
 
 interface CalendarViewProps {
   appointments: Appointment[];
   selectedTherapist: string;
+  clients: User[];
   onAppointmentClick?: (appointmentId: string) => void;
   onDayClick?: (date: Date) => void;
 }
@@ -34,7 +35,7 @@ const getCalendarGrid = (year: number, month: number): (Date | null)[] => {
   return grid;
 };
 
-export function CalendarView({ appointments, selectedTherapist, onAppointmentClick, onDayClick }: CalendarViewProps) {
+export function CalendarView({ appointments, selectedTherapist, clients, onAppointmentClick, onDayClick }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
@@ -47,6 +48,9 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
   console.log('CalendarView - selectedTherapist prop:', selectedTherapist);
 
   const appointmentsByDate = useMemo(() => {
+    console.log('CalendarView - appointments prop:', appointments);
+    console.log('CalendarView - selectedTherapist prop:', selectedTherapist);
+
     const map = new Map<string, Appointment[]>();
     appointments.forEach((apt) => {
       if (selectedTherapist === 'all' || apt.therapistId === selectedTherapist) {
@@ -60,6 +64,15 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
     console.log('CalendarView - appointmentsByDate map:', map);
     return map;
   }, [appointments, selectedTherapist]);
+
+  const clientNames = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const name = `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
+      map.set(client.id, name);
+    });
+    return map;
+  }, [clients]);
 
   const goToPreviousMonth = () => {
     if (currentMonth === 0) {
@@ -83,8 +96,8 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
   const columnWidth = width / 7;
   const rowHeight = height / rowCount;
 
-  const Cell = useCallback(({ columnIndex, rowIndex, style, data }: { columnIndex: number, rowIndex: number, style: React.CSSProperties, data: { appointmentsByDate: Map<string, Appointment[]>, onAppointmentClick?: (appointmentId: string) => void, onDayClick?: (date: Date) => void } }) => {
-    const { appointmentsByDate, onAppointmentClick, onDayClick } = data;
+  const Cell = useCallback(({ columnIndex, rowIndex, style, data }: { columnIndex: number, rowIndex: number, style: React.CSSProperties, data: { appointmentsByDate: Map<string, Appointment[]>, onAppointmentClick?: (appointmentId: string) => void, onDayClick?: (date: Date) => void, clientNames: Map<string, string> } }) => {
+    const { appointmentsByDate, onAppointmentClick, onDayClick, clientNames } = data;
     const index = rowIndex * 7 + columnIndex;
     const day = calendarGrid[index];
 
@@ -112,7 +125,7 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
                 onAppointmentClick?.(apt.id);
               }}
             >
-              {apt.id}
+              {apt.startTime} - {clientNames.get(apt.clientId) || 'Cliente Desconocido'}
             </div>
           ))}
         </div>
@@ -147,7 +160,7 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
             rowCount={rowCount}
             rowHeight={rowHeight}
             width={width}
-            itemData={{ appointmentsByDate, onAppointmentClick, onDayClick }}
+            itemData={{ appointmentsByDate, onAppointmentClick, onDayClick, clientNames }}
           >
             {Cell}
           </FixedSizeGrid>
