@@ -8,8 +8,7 @@ import { DayOccupancyGrid } from "@/components/DayOccupancyGrid"; // This will b
 import { DayAvailabilitySummary } from "@/components/DayAvailabilitySummary"; // This will be removed later if not needed
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
-import { useAuth } from "@/hooks/useAuth";
-// import { RenderDetector } from "@/components/RenderDetector"; // Removed for now
+import { useAuth } from "@/contexts/AuthContext"; // Use centralized context
 import {
   Select,
   SelectContent,
@@ -27,44 +26,52 @@ import { getAppointments, getTherapists, getUsers } from '@/lib/api';
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // TEMP FIX: Comment out useAuth to test if multiple instances cause render loops
-  // const { user } = useAuth();
-  const user: User | null = null; // Temporarily disable to test
+  const { user } = useAuth(); // Now using centralized context
 
   console.log('[Calendar3] CalendarContent mounted/rendered');
 
-  // FIX: Use lazy initialization to prevent creating new Date on every render
+  // Use lazy initialization to prevent creating new Date on every render
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
 
-  const { data: therapists = [], isLoading: isLoadingTherapists } = useQuery<Therapist[]>({ // Changed to useQuery
+  const { data: therapists = [], isLoading: isLoadingTherapists } = useQuery<Therapist[]>({
     queryKey: ["therapists"],
     queryFn: getTherapists,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data: appointments = [] } = useQuery<Appointment[]>({ // Changed to useQuery
+  const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ["appointments"],
     queryFn: getAppointments,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data: clients = [] } = useQuery<User[]>({ // Changed to useQuery
+  const { data: clients = [] } = useQuery<User[]>({
     queryKey: ["users"],
     queryFn: getUsers,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // Determine initial selected therapist based on user role
-  // TEMP: Simplified without user dependency
   const initialTherapist = useMemo(() => {
     if (therapistParam) return therapistParam;
+    if (user?.role === "therapist" && user?.therapistId) {
+      return user.therapistId;
+    }
     return "all";
-  }, [therapistParam]);
+  }, [therapistParam, user?.role, user?.therapistId]);
 
   const [selectedTherapist, setSelectedTherapist] = useState(initialTherapist);
-  // TEMP: Simplified without user dependency
   const [viewType, setViewType] = useState<"general" | "individual">(
-    therapistParam ? "individual" : "general"
+    therapistParam || (user?.role === "therapist" && user?.therapistId) ? "individual" : "general"
   );
   const [calendarView, setCalendarView] = useState<"monthly" | "weekly">("monthly");
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);

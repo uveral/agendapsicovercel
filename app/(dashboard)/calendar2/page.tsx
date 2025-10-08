@@ -9,8 +9,7 @@ const DayOccupancyGrid = lazy(() => import("@/components/DayOccupancyGrid").then
 const DayAvailabilitySummary = lazy(() => import("@/components/DayAvailabilitySummary").then(mod => ({ default: mod.DayAvailabilitySummary })));
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
-import { useAuth } from "@/hooks/useAuth";
-// import { RenderDetector } from "@/components/RenderDetector"; // DISABLED FOR DEBUGGING
+import { useAuth } from "@/contexts/AuthContext"; // Use centralized context
 import {
   Select,
   SelectContent,
@@ -27,13 +26,11 @@ import { Calendar } from "@/components/ui/calendar";
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // TEMP FIX: Comment out useAuth to test if multiple instances cause render loops
-  // const { user } = useAuth();
-  const user: User | null = null; // Temporarily disable to test
+  const { user } = useAuth(); // Now using centralized context
 
   console.log('[Calendar2] CalendarContent mounted/rendered');
 
-  // FIX: Use lazy initialization to prevent creating new Date on every render
+  // Use lazy initialization to prevent creating new Date on every render
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
 
   // Parse query params
@@ -41,27 +38,37 @@ function CalendarContent() {
 
   const { data: therapists = [], isLoading: isLoadingTherapists } = useQuery<Therapist[]>({
     queryKey: ["/api/therapists"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: clients = [] } = useQuery<User[]>({
     queryKey: ["/api/clients"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // Determine initial selected therapist based on user role
-  // TEMP: Simplified without user dependency
   const initialTherapist = useMemo(() => {
     if (therapistParam) return therapistParam;
+    if (user?.role === "therapist" && user?.therapistId) {
+      return user.therapistId;
+    }
     return "all";
-  }, [therapistParam]);
+  }, [therapistParam, user?.role, user?.therapistId]);
 
   const [selectedTherapist, setSelectedTherapist] = useState(initialTherapist);
-  // TEMP: Simplified without user dependency
   const [viewType, setViewType] = useState<"general" | "individual">(
-    therapistParam ? "individual" : "general"
+    therapistParam || (user?.role === "therapist" && user?.therapistId) ? "individual" : "general"
   );
   const [calendarView, setCalendarView] = useState<"monthly" | "weekly">("monthly");
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);

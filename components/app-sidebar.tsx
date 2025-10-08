@@ -21,7 +21,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext'; // Use centralized context
 
 const menuItems = [
   {
@@ -66,14 +66,14 @@ export const AppSidebar = memo(function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, loading } = useAuth(); // Use centralized context
 
   // DEBUG: Log sidebar renders
-  console.log('[AppSidebar] Rendering. pathname:', pathname, 'user:', user?.email);
+  console.log('[AppSidebar] Rendering. pathname:', pathname, 'user:', user?.email, 'loading:', loading);
 
   const isAdmin = user?.role === 'admin';
 
-  const handleLogout = async () => {
+  const handleLogout = React.useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
     toast({
@@ -82,7 +82,18 @@ export const AppSidebar = memo(function AppSidebar() {
     });
     router.push('/login');
     router.refresh();
-  };
+  }, [router, toast]);
+
+  // Show loading state to prevent flashing
+  if (loading) {
+    return (
+      <Sidebar>
+        <SidebarContent>
+          <div className="p-4 text-sm text-muted-foreground">Cargando...</div>
+        </SidebarContent>
+      </Sidebar>
+    );
+  }
 
   return (
     <Sidebar>
