@@ -56,6 +56,14 @@ export interface UiScheduleSlot {
   endTime: string; // HH:mm
 }
 
+function normalizeDateValue(value: unknown): string | Date | null {
+  if (value instanceof Date) {
+    return value;
+  }
+  const maybeString = toStringOrNull(value);
+  return maybeString;
+}
+
 export function sanitizeWorkingHoursRecord(
   slot: Record<string, unknown> | TherapistWorkingHours,
 ): TherapistWorkingHours | null {
@@ -93,14 +101,14 @@ export function sanitizeWorkingHoursRecord(
     dayOfWeek: day,
     startTime,
     endTime,
-    createdAt:
+    createdAt: normalizeDateValue(
       (slot as TherapistWorkingHours).createdAt ??
-      (slot as Record<string, unknown>).created_at ??
-      null,
-    updatedAt:
+        (slot as Record<string, unknown>).created_at,
+    ),
+    updatedAt: normalizeDateValue(
       (slot as TherapistWorkingHours).updatedAt ??
-      (slot as Record<string, unknown>).updated_at ??
-      null,
+        (slot as Record<string, unknown>).updated_at,
+    ),
   };
 }
 
