@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense, useMemo, useCallback, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { debounce } from "lodash";
 import { useCalendarState } from "@/hooks/useCalendarState";
 import { TherapistMonthView } from "@/components/TherapistMonthView";

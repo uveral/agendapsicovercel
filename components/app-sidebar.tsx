@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { memo } from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { Calendar, Users, UserCircle, LayoutDashboard, Clock, Settings, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
