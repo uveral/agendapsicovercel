@@ -38,8 +38,6 @@ function CalendarContent() {
     setCalendarView
   } = useCalendarState();
 
-  console.log('[Calendar] CalendarContent rendered. selectedTherapist:', selectedTherapist);
-
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
 
@@ -83,7 +81,6 @@ function CalendarContent() {
 
   // Sync URL params to Zustand state (one-way only: URL → State)
   useEffect(() => {
-    console.log('[Calendar] useEffect - therapistParam:', therapistParam, 'current:', selectedTherapist);
     if (therapistParam && therapistParam !== selectedTherapist) {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
@@ -97,7 +94,6 @@ function CalendarContent() {
   // Debounced URL update function (memoized to prevent recreation)
   const updateURL = useMemo(
     () => debounce((value: string) => {
-      console.log('[Calendar] Debounced URL update:', value);
       startTransition(() => {
         const url = value !== "all"
           ? `/calendar?therapist=${value}`
@@ -111,7 +107,6 @@ function CalendarContent() {
   );
 
   const therapistsList = useMemo(() => {
-    console.log('[Calendar] Recalculating therapistsList');
     return [
       { id: "all", name: "Todos los terapeutas" },
       ...therapists.map((t) => ({ id: t.id, name: t.name })),
@@ -119,9 +114,7 @@ function CalendarContent() {
   }, [therapists]);
 
   const handleTherapistChange = useCallback((value: string) => {
-    console.log('[Calendar] handleTherapistChange:', value);
     if (value === selectedTherapist) {
-      console.log('[Calendar] Same therapist selected, skipping');
       return;
     }
 
@@ -134,17 +127,12 @@ function CalendarContent() {
   }, [selectedTherapist, setSelectedTherapist, setViewType, updateURL]);
 
   const handleDayClick = useCallback((therapistId: string, date: string) => {
-    console.log('[Calendar] handleDayClick:', therapistId, date);
     setCreateDialogContext({ therapistId, date });
     setCreateDialogOpen(true);
   }, []);
 
-  // DEBUG: Log render
-  console.log('[Calendar] Rendering. therapists:', therapists.length, 'appointments:', appointments.length);
-
   // CRITICAL FIX: Don't render heavy components until we have all data
   if (isLoadingTherapists || therapists.length === 0) {
-    console.log('[Calendar] Loading therapists... (blocking heavy component render)');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>

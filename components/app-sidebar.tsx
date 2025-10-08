@@ -70,7 +70,6 @@ const MenuItem = memo(({
   item: { title: string; url: string; icon: React.ComponentType<{ className?: string }> };
   isActive: boolean;
 }) => {
-  console.log('[MenuItem] Rendering:', item.title, 'active:', isActive);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -94,11 +93,8 @@ export const AppSidebar = memo(function AppSidebar() {
   const { user, loading } = useAuth(); // Use centralized context
 
   // DEBUG: Log sidebar renders
-  console.log('[AppSidebar] Rendering. pathname:', pathname, 'user:', user?.email, 'loading:', loading);
-
   // Memoize active states calculation
   const activeStates = useMemo(() => {
-    console.log('[AppSidebar] Recalculating activeStates for pathname:', pathname);
     return menuItems.reduce((acc, item) => {
       acc[item.url] = pathname === item.url;
       return acc;
@@ -174,8 +170,6 @@ const SidebarFooterContent = memo(({ user }: { user: User | null }) => {
     router.push('/login');
     router.refresh();
   }, [router, toast]);
-
-  console.log('[SidebarFooterContent] Rendering');
 
   return (
     <SidebarFooter className="p-4">
