@@ -74,12 +74,45 @@ function sanitizeTime(time: string | null | undefined): string {
   return trimmed;
 }
 
-function combineDateAndTime(date: string, time: string): Date {
+function resolveIsoDate(value: string | Date | null | undefined): string {
+  if (value instanceof Date) {
+    if (!Number.isNaN(value.getTime())) {
+      return value.toISOString().slice(0, 10);
+    }
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  const raw = typeof value === 'string' ? value.trim() : '';
+
+  if (raw.length === 0) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  // Intentamos extraer un patrón ISO básico si está embebido en la cadena.
+  const match = raw.match(/\d{4}-\d{2}-\d{2}/);
+  if (match) {
+    return match[0];
+  }
+
+  return new Date().toISOString().slice(0, 10);
+}
+
+function combineDateAndTime(date: string | Date, time: string): Date {
+  const isoDate = resolveIsoDate(date);
   const sanitized = sanitizeTime(time);
-  const isoCandidate = `${date}T${sanitized}`;
+  const isoCandidate = `${isoDate}T${sanitized}`;
   const parsed = new Date(isoCandidate);
   if (Number.isNaN(parsed.getTime())) {
-    const fallback = parseISO(date);
+    const fallback = parseISO(isoDate);
     if (Number.isNaN(fallback.getTime())) {
       return new Date();
     }
@@ -121,15 +154,16 @@ function slugifyId(value: string): string {
 
 export function normalizeSupabaseAppointments(records: ApiAppointmentRecord[]): NormalizedAppointment[] {
   return records.map((appointment) => {
-    const startDateTime = combineDateAndTime(String(appointment.date), appointment.startTime);
-    const endDateTime = combineDateAndTime(String(appointment.date), appointment.endTime);
+    const isoDate = resolveIsoDate(appointment.date ?? null);
+    const startDateTime = combineDateAndTime(isoDate, appointment.startTime);
+    const endDateTime = combineDateAndTime(isoDate, appointment.endTime);
     const therapistName = buildTherapistName(appointment.therapist ?? null);
     const clientName = buildClientName(appointment.client ?? null);
     const durationMinutes = resolveDurationMinutes(startDateTime, endDateTime, appointment.durationMinutes);
 
     return {
       id: appointment.id,
-      date: String(appointment.date),
+      date: isoDate,
       startTime: appointment.startTime,
       endTime: appointment.endTime,
       startDateTime,
@@ -159,8 +193,9 @@ export function normalizeSupabaseAppointments(records: ApiAppointmentRecord[]): 
 
 export function normalizeSampleAppointments(records: SampleAppointment[]): NormalizedAppointment[] {
   return records.map((appointment) => {
-    const startDateTime = combineDateAndTime(appointment.date, appointment.start);
-    const endDateTime = combineDateAndTime(appointment.date, appointment.end);
+    const isoDate = resolveIsoDate(appointment.date);
+    const startDateTime = combineDateAndTime(isoDate, appointment.start);
+    const endDateTime = combineDateAndTime(isoDate, appointment.end);
     const durationMinutes = resolveDurationMinutes(startDateTime, endDateTime, null);
     const status = SAMPLE_STATUS_MAP[appointment.status];
     const therapistId = slugifyId(appointment.therapist);
@@ -168,7 +203,7 @@ export function normalizeSampleAppointments(records: SampleAppointment[]): Norma
 
     return {
       id: appointment.id,
-      date: appointment.date,
+      date: isoDate,
       startTime: appointment.start,
       endTime: appointment.end,
       startDateTime,
