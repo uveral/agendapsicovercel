@@ -61,7 +61,7 @@ const ADMIN_LINKS: LinkDescriptor[] = [
   { id: 'settings', title: 'Configuración', href: '/settings', icon: Settings, roles: ['admin'] },
 ];
 
-function buildNavigation(userRole: string | undefined): LinkDescriptor[] {
+function buildNavigation(userRole: string | null | undefined): LinkDescriptor[] {
   const allowed = new Set([userRole ?? '']);
 
   return [...CORE_LINKS, ...CALENDAR_LINKS, ...ADMIN_LINKS].filter((item) => {
