@@ -14,7 +14,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import esLocale from 'date-fns/locale/es';
+import { es as esLocale } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Loader2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
