@@ -1,112 +1,168 @@
+'use client';
+
+import { useMemo } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import {
-  SAMPLE_APPOINTMENTS,
-  STATUS_TRANSLATIONS,
-  SAMPLE_THERAPISTS,
-  type SampleAppointment,
-} from '@/shared/sampleCalendarData';
-
-function groupByDate(appointments: SampleAppointment[]): Record<string, SampleAppointment[]> {
-  return appointments.reduce<Record<string, SampleAppointment[]>>((acc, appointment) => {
-    if (!acc[appointment.date]) {
-      acc[appointment.date] = [];
-    }
-    acc[appointment.date].push(appointment);
-    return acc;
-  }, {});
-}
+  computeStatusSummary,
+  groupAppointmentsByDate,
+  sortAppointmentsByDateTime,
+  STATUS_LABELS_ES,
+  type NormalizedAppointment,
+  type StatusSummary,
+} from '@/shared/diagnosticCalendarData';
+import { useDiagnosticCalendarData } from '@/hooks/useDiagnosticCalendarData';
 
 function formatDateLabel(date: string) {
   const parsed = new Date(date);
   return format(parsed, "EEEE d 'de' MMMM", { locale: es });
 }
 
-function getStatusSummary(appointments: SampleAppointment[]) {
-  return appointments.reduce(
-    (acc, appointment) => {
-      acc.total += 1;
-      acc[appointment.status] += 1;
-      return acc;
-    },
-    { total: 0, confirmada: 0, pendiente: 0, cancelada: 0 },
+function formatTimeRange(appointment: NormalizedAppointment) {
+  return `${appointment.startTime}–${appointment.endTime}`;
+}
+
+function formatDuration(appointment: NormalizedAppointment) {
+  if (!appointment.durationMinutes) return 'Sin estimar';
+  return `${appointment.durationMinutes} minutos`;
+}
+
+function SummaryList({ summary }: { summary: StatusSummary }) {
+  return (
+    <dl className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+      <div>
+        <dt className="font-medium text-foreground">Total de citas</dt>
+        <dd>{summary.total}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-foreground">Confirmadas</dt>
+        <dd>{summary.confirmed}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-foreground">Pendientes</dt>
+        <dd>{summary.pending}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-foreground">Canceladas</dt>
+        <dd>{summary.cancelled}</dd>
+      </div>
+    </dl>
   );
 }
 
 export default function CalendarFivePage() {
-  const sortedAppointments = [...SAMPLE_APPOINTMENTS].sort((a, b) => {
-    if (a.date === b.date) {
-      return a.start.localeCompare(b.start);
-    }
-    return a.date.localeCompare(b.date);
-  });
+  const { appointments, isLoading, isError, error, source } = useDiagnosticCalendarData();
 
-  const appointmentsByDate = groupByDate(sortedAppointments);
-  const summary = getStatusSummary(sortedAppointments);
+  const sortedAppointments = useMemo(() => sortAppointmentsByDateTime(appointments), [appointments]);
+  const appointmentsByDate = useMemo(
+    () => groupAppointmentsByDate(sortedAppointments),
+    [sortedAppointments],
+  );
+  const summary = useMemo(() => computeStatusSummary(sortedAppointments), [sortedAppointments]);
+
+  const errorMessage =
+    isError && error instanceof Error
+      ? error.message
+      : isError
+        ? 'No se pudieron obtener los datos de Supabase.'
+        : null;
 
   return (
     <div className="space-y-10 p-6">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Calendario 5 — Visión en texto</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Esta versión lista cada cita como bloques de texto simples. Utiliza los mismos datos de ejemplo que
-          las demás vistas y nos permite descartar cualquier componente visual como posible causa de bloqueos.
+          Esta versión lista cada cita como bloques de texto simples utilizando los datos en vivo de Supabase. Si la
+          conexión falla, se recurre automáticamente al conjunto de muestra para mantener la referencia visual.
         </p>
+        <Badge variant={source === 'supabase' ? 'default' : 'secondary'}>
+          Fuente de datos: {source === 'supabase' ? 'Supabase' : 'Datos de ejemplo'}
+        </Badge>
       </header>
+
+      {isLoading ? (
+        <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/40 p-6 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Cargando agenda textual…</p>
+          <p>Estamos preparando la lista completa de citas para mostrarla en formato puramente textual.</p>
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <Alert variant="destructive">
+          <AlertTitle>Error al recuperar citas</AlertTitle>
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Resumen textual</h2>
-        <dl className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="font-medium text-foreground">Total de citas</dt>
-            <dd>{summary.total}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-foreground">Confirmadas</dt>
-            <dd>{summary.confirmada}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-foreground">Pendientes</dt>
-            <dd>{summary.pendiente}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-foreground">Canceladas</dt>
-            <dd>{summary.cancelada}</dd>
-          </div>
-        </dl>
+        <SummaryList summary={summary} />
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Agenda detallada</h2>
         <div className="space-y-6">
-          {Object.entries(appointmentsByDate).map(([date, appointments]) => (
+          {Object.entries(appointmentsByDate).map(([date, dayAppointments]) => (
             <article key={date} className="space-y-3">
               <h3 className="text-lg font-semibold text-foreground">
-                {formatDateLabel(date)} ({appointments.length} citas)
+                {formatDateLabel(date)} ({dayAppointments.length} citas)
               </h3>
               <div className="space-y-4 text-sm">
-                {appointments.map((appointment) => (
+                {dayAppointments.map((appointment) => (
                   <div key={appointment.id} className="space-y-1 rounded-md border border-border p-4">
                     <p>
-                      <span className="font-semibold">Horario:</span> {appointment.start}–{appointment.end} —{' '}
-                      <span className="font-semibold">Modalidad:</span> {appointment.modality}
+                      <span className="font-semibold">Horario:</span> {formatTimeRange(appointment)} —{' '}
+                      <span className="font-semibold">Duración:</span> {formatDuration(appointment)}
                     </p>
                     <p>
-                      <span className="font-semibold">Terapeuta:</span> {appointment.therapist}
+                      <span className="font-semibold">Terapeuta:</span> {appointment.therapistName}
+                      {appointment.therapistSpecialty ? ` · ${appointment.therapistSpecialty}` : ''}
                     </p>
                     <p>
-                      <span className="font-semibold">Cliente:</span> {appointment.client}
+                      <span className="font-semibold">Cliente:</span> {appointment.clientName}
+                      {appointment.clientEmail ? ` (${appointment.clientEmail})` : ''}
                     </p>
                     <p>
-                      <span className="font-semibold">Servicio:</span> {appointment.service}
+                      <span className="font-semibold">Estado:</span> {STATUS_LABELS_ES[appointment.status]}
                     </p>
-                    <p>
-                      <span className="font-semibold">Sala:</span> {appointment.room}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Estado:</span> {STATUS_TRANSLATIONS[appointment.status]}
-                    </p>
+                    {appointment.frequency ? (
+                      <p>
+                        <span className="font-semibold">Frecuencia:</span> {appointment.frequency}
+                      </p>
+                    ) : null}
+                    {appointment.pendingReason ? (
+                      <p>
+                        <span className="font-semibold">Motivo pendiente:</span> {appointment.pendingReason}
+                      </p>
+                    ) : null}
+                    {appointment.notes ? (
+                      <p>
+                        <span className="font-semibold">Notas:</span> {appointment.notes}
+                      </p>
+                    ) : null}
+                    {appointment.modality ? (
+                      <p>
+                        <span className="font-semibold">Modalidad:</span> {appointment.modality}
+                      </p>
+                    ) : null}
+                    {appointment.room ? (
+                      <p>
+                        <span className="font-semibold">Sala:</span> {appointment.room}
+                      </p>
+                    ) : null}
+                    {appointment.service ? (
+                      <p>
+                        <span className="font-semibold">Servicio:</span> {appointment.service}
+                      </p>
+                    ) : null}
+                    {appointment.optimizationScore !== null && appointment.optimizationScore !== undefined ? (
+                      <p>
+                        <span className="font-semibold">Índice de optimización:</span> {appointment.optimizationScore}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -118,14 +174,17 @@ export default function CalendarFivePage() {
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Profesionales implicados</h2>
         <p className="text-sm text-muted-foreground">
-          Terapeutas que participan en esta selección de citas:
+          Terapeutas que participan en esta selección de citas ordenados por aparición cronológica.
         </p>
         <ul className="list-disc space-y-1 pl-5 text-sm">
-          {SAMPLE_THERAPISTS.map((therapist) => (
-            <li key={therapist}>{therapist}</li>
+          {sortedAppointments.map((appointment) => (
+            <li key={`${appointment.date}-${appointment.startTime}-${appointment.id}`}>
+              {appointment.therapistName} — {STATUS_LABELS_ES[appointment.status]}
+            </li>
           ))}
         </ul>
       </section>
     </div>
   );
 }
+
