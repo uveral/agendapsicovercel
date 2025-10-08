@@ -44,13 +44,7 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
 
   const calendarGrid = useMemo(() => getCalendarGrid(currentYear, currentMonth), [currentYear, currentMonth]);
 
-  console.log('CalendarView - appointments prop:', appointments);
-  console.log('CalendarView - selectedTherapist prop:', selectedTherapist);
-
   const appointmentsByDate = useMemo(() => {
-    console.log('CalendarView - appointments prop:', appointments);
-    console.log('CalendarView - selectedTherapist prop:', selectedTherapist);
-
     const map = new Map<string, Appointment[]>();
     appointments.forEach((apt) => {
       if (selectedTherapist === 'all' || apt.therapistId === selectedTherapist) {
@@ -61,11 +55,8 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
         map.get(date)?.push(apt);
       }
     });
-    console.log('CalendarView - appointmentsByDate map:', map);
     return map;
   }, [appointments, selectedTherapist]);
-
-  console.log('CalendarView - clients prop:', clients);
 
   const clientNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -73,7 +64,6 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
       const name = `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
       map.set(client.id, name);
     });
-    console.log('CalendarView - clientNames map:', map);
     return map;
   }, [clients]);
 
@@ -109,7 +99,6 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
     }
 
     const dayAppointments = appointmentsByDate.get(day.toDateString()) || [];
-    console.log('CalendarView - dayAppointments:', dayAppointments);
 
     return (
       <div

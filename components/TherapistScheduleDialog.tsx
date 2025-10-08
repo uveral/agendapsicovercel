@@ -24,6 +24,7 @@ interface TherapistScheduleDialogProps {
   therapistName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canEdit?: boolean;
 }
 
 interface ScheduleSlot {
@@ -47,6 +48,7 @@ export function TherapistScheduleDialog({
   therapistName,
   open,
   onOpenChange,
+  canEdit = true,
 }: TherapistScheduleDialogProps) {
   const { toast } = useToast();
   const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
@@ -104,6 +106,7 @@ export function TherapistScheduleDialog({
   });
 
   const addSlot = (dayOfWeek: number) => {
+    if (!canEdit) return;
     setScheduleSlots([
       ...scheduleSlots,
       { dayOfWeek, startTime: "09:00", endTime: "10:00" },
@@ -111,6 +114,7 @@ export function TherapistScheduleDialog({
   };
 
   const removeSlot = (dayOfWeek: number, index: number) => {
+    if (!canEdit) return;
     const daySlots = scheduleSlots.filter((s) => s.dayOfWeek === dayOfWeek);
     const slotToRemove = daySlots[index];
     setScheduleSlots(scheduleSlots.filter((s) => s !== slotToRemove));
@@ -122,6 +126,7 @@ export function TherapistScheduleDialog({
     field: "startTime" | "endTime",
     value: string
   ) => {
+    if (!canEdit) return;
     const daySlots = scheduleSlots.filter((s) => s.dayOfWeek === dayOfWeek);
     const slotToUpdate = daySlots[index];
     const slotIndex = scheduleSlots.indexOf(slotToUpdate);
@@ -132,6 +137,7 @@ export function TherapistScheduleDialog({
   };
 
   const handleSave = () => {
+    if (!canEdit) return;
     saveMutation.mutate(scheduleSlots);
   };
 
@@ -167,6 +173,7 @@ export function TherapistScheduleDialog({
                         variant="outline"
                         onClick={() => addSlot(dayOfWeek)}
                         data-testid={`button-add-slot-${dayOfWeek}`}
+                        disabled={!canEdit}
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Añadir bloque
@@ -201,6 +208,8 @@ export function TherapistScheduleDialog({
                                     )
                                   }
                                   data-testid={`input-start-time-${dayOfWeek}-${index}`}
+                                  disabled={!canEdit}
+                                  readOnly={!canEdit}
                                 />
                               </div>
                               <div>
@@ -219,6 +228,8 @@ export function TherapistScheduleDialog({
                                     )
                                   }
                                   data-testid={`input-end-time-${dayOfWeek}-${index}`}
+                                  disabled={!canEdit}
+                                  readOnly={!canEdit}
                                 />
                               </div>
                             </div>
@@ -228,6 +239,7 @@ export function TherapistScheduleDialog({
                               variant="ghost"
                               onClick={() => removeSlot(dayOfWeek, index)}
                               data-testid={`button-remove-slot-${dayOfWeek}-${index}`}
+                              disabled={!canEdit}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -254,7 +266,7 @@ export function TherapistScheduleDialog({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !canEdit}
             data-testid="button-save-schedule"
           >
             {saveMutation.isPending ? "Guardando..." : "Guardar horario"}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Search, Plus } from "lucide-react";
@@ -46,6 +46,7 @@ import { insertTherapistSchema, type InsertTherapist } from "@/lib/types";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Therapist, Appointment, TherapistWorkingHours } from "@/lib/types";
+import { useAuth } from "@/contexts/AuthContext";
 
 const calculateWeeklyAvailability = (
   appointments: Appointment[],
@@ -103,6 +104,10 @@ export default function Therapists() {
   const [scheduleDialogTherapist, setScheduleDialogTherapist] = useState<{ id: string; name: string } | null>(null);
   const [deleteTherapist, setDeleteTherapist] = useState<{ id: string; name: string } | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const isAdmin = user?.role === "admin";
+  const currentTherapistId = user?.therapistId ?? null;
 
   const form = useForm<InsertTherapist>({
     resolver: zodResolver(insertTherapistSchema),
@@ -201,7 +206,15 @@ export default function Therapists() {
     };
   });
 
-  const filteredTherapists = therapistsWithStats.filter((t) => {
+  const allowedTherapists = useMemo(() => {
+    if (isAdmin) return therapistsWithStats;
+    if (currentTherapistId) {
+      return therapistsWithStats.filter((t) => t.id === currentTherapistId);
+    }
+    return [];
+  }, [currentTherapistId, isAdmin, therapistsWithStats]);
+
+  const filteredTherapists = allowedTherapists.filter((t) => {
     const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSpecialty = filterSpecialty === "all" || t.specialty === filterSpecialty;
     return matchesSearch && matchesSpecialty;
@@ -224,10 +237,12 @@ export default function Therapists() {
             Gestiona los {therapists.length} terapeutas del centro
           </p>
         </div>
-        <Button data-testid="button-add-therapist" onClick={() => setIsDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo terapeuta
-        </Button>
+        {isAdmin && (
+          <Button data-testid="button-add-therapist" onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo terapeuta
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -257,25 +272,29 @@ export default function Therapists() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredTherapists.map((therapist) => (
-          <TherapistCard
-            key={therapist.id}
-            {...therapist}
-            onViewCalendar={(id) => router.push(`/calendar?therapist=${id}`)}
-            onManageSchedule={(id) => {
-              const therapistData = therapists.find(t => t.id === id);
-              if (therapistData) {
-                setScheduleDialogTherapist({ id: therapistData.id, name: therapistData.name });
-              }
-            }}
-            onDelete={(id) => {
-              const therapistData = therapists.find(t => t.id === id);
-              if (therapistData) {
-                setDeleteTherapist({ id: therapistData.id, name: therapistData.name });
-              }
-            }}
-          />
-        ))}
+        {filteredTherapists.map((therapist) => {
+          const canManageSchedule = isAdmin || therapist.id === currentTherapistId;
+
+          return (
+            <TherapistCard
+              key={therapist.id}
+              {...therapist}
+              onViewCalendar={(id) => router.push(`/calendar?therapist=${id}`)}
+              onManageSchedule={canManageSchedule ? (id) => {
+                const therapistData = therapists.find(t => t.id === id);
+                if (therapistData) {
+                  setScheduleDialogTherapist({ id: therapistData.id, name: therapistData.name });
+                }
+              } : undefined}
+              onDelete={isAdmin ? (id) => {
+                const therapistData = therapists.find(t => t.id === id);
+                if (therapistData) {
+                  setDeleteTherapist({ id: therapistData.id, name: therapistData.name });
+                }
+              } : undefined}
+            />
+          );
+        })}
       </div>
 
       {filteredTherapists.length === 0 && (
@@ -374,10 +393,12 @@ export default function Therapists() {
               setScheduleDialogTherapist(null);
             }
           }}
+          canEdit={isAdmin || scheduleDialogTherapist.id === currentTherapistId}
         />
       )}
 
-      <AlertDialog open={!!deleteTherapist} onOpenChange={(open) => !open && setDeleteTherapist(null)}>
+      {isAdmin && (
+        <AlertDialog open={!!deleteTherapist} onOpenChange={(open) => !open && setDeleteTherapist(null)}>
         <AlertDialogContent data-testid="dialog-delete-therapist">
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar terapeuta?</AlertDialogTitle>
@@ -396,7 +417,8 @@ export default function Therapists() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+        </AlertDialog>
+      )}
     </div>
   );
 }

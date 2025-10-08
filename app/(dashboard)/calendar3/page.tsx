@@ -28,8 +28,6 @@ function CalendarContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth(); // Now using centralized context
 
-  console.log('[Calendar3] CalendarContent mounted/rendered');
-
   // Use lazy initialization to prevent creating new Date on every render
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
 
@@ -90,7 +88,6 @@ function CalendarContent() {
   }, [therapistParam]);
 
   const therapistsList = useMemo(() => {
-    console.log('[Calendar3] Recalculating therapistsList');
     return [
       { id: "all", name: "Todos los terapeutas" },
       ...therapists.map((t) => ({ id: t.id, name: t.name })),
@@ -98,9 +95,7 @@ function CalendarContent() {
   }, [therapists]);
 
   const handleTherapistChange = useCallback((value: string) => {
-    console.log('[Calendar3] handleTherapistChange:', value);
     if (value === selectedTherapist) {
-      console.log('[Calendar3] Same therapist selected, skipping navigation');
       return; // Avoid navigation if no change
     }
 
@@ -115,23 +110,18 @@ function CalendarContent() {
   }, [router, selectedTherapist]);
 
   // DEBUG: Log render
-  console.log('[Calendar3] Rendering. therapists:', therapists.length, 'appointments:', appointments.length);
-
   const handleDayClick = useCallback((therapistId: string, date: string) => {
-    console.log('[Calendar3] handleDayClick:', therapistId, date);
     setCreateDialogContext({ therapistId, date });
     setCreateDialogOpen(true);
   }, []);
 
   const handleCalendarViewDayClick = useCallback((date: Date) => {
-    console.log('[Calendar3] handleCalendarViewDayClick:', date);
     setCreateDialogContext({ therapistId: selectedTherapist, date: date.toISOString().split('T')[0] });
     setCreateDialogOpen(true);
   }, [selectedTherapist]);
 
   // CRITICAL FIX: Don't render heavy components until we have all data
   if (isLoadingTherapists || therapists.length === 0) {
-    console.log('[Calendar3] Loading therapists... (blocking heavy component render)');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>

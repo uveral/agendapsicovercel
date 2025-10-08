@@ -8,6 +8,32 @@ export async function GET(
   const { id } = await params;
   const supabase = await createClient();
 
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('users')
+    .select('role, therapist_id')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const isAdmin = profile.role === 'admin';
+  const isOwnSchedule = profile.therapist_id === id;
+
+  if (!isAdmin && !isOwnSchedule) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const { data: schedule, error } = await supabase
     .from('therapist_working_hours')
     .select('*')
@@ -39,6 +65,36 @@ export async function PUT(
   const { id } = await params;
   const supabase = await createClient();
   const slots = await request.json();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('users')
+    .select('role, therapist_id')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const isAdmin = profile.role === 'admin';
+  const isOwnSchedule = profile.therapist_id === id;
+
+  if (!isAdmin && !isOwnSchedule) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (!Array.isArray(slots)) {
+    return NextResponse.json({ error: 'Formato de datos inválido' }, { status: 400 });
+  }
 
   // Delete existing schedule
   await supabase
