@@ -129,13 +129,15 @@ export default function MonthlyPatientCalendar() {
                   {week.map((day) => {
                     const isoDate = format(day, 'yyyy-MM-dd');
                     const dayAppointments = appointmentsByDate[isoDate] ?? [];
+                    const displayAppointments = dayAppointments.slice(0, 8);
+                    const extraAppointments = Math.max(0, dayAppointments.length - displayAppointments.length);
                     const isCurrentMonth = isSameMonth(day, currentMonth);
                     const isCurrentDay = isToday(day);
 
                     return (
                       <Card
                         key={isoDate}
-                        className={`flex h-64 flex-col border ${
+                        className={`flex min-h-[180px] flex-col border ${
                           isCurrentMonth ? 'bg-background' : 'bg-muted'
                         }`}
                       >
@@ -159,17 +161,17 @@ export default function MonthlyPatientCalendar() {
                           )}
                         </CardHeader>
                         <CardContent className="flex-1 overflow-hidden px-2 py-2">
-                          {dayAppointments.length === 0 ? (
+                          {displayAppointments.length === 0 ? (
                             <p className="mt-8 text-center text-xs text-muted-foreground">Sin citas</p>
                           ) : (
                             <ScrollArea className="h-full pr-2">
-                              <ul className="space-y-2">
-                                {dayAppointments.map((appointment) => (
+                              <ul className="space-y-1.5">
+                                {displayAppointments.map((appointment) => (
                                   <li
                                     key={appointment.id}
                                     className="rounded border border-muted-foreground/20 bg-muted/30 p-2"
                                   >
-                                    <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
                                       <span>{format(appointment.startDateTime, 'HH:mm')}</span>
                                       <span
                                         className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
@@ -179,15 +181,17 @@ export default function MonthlyPatientCalendar() {
                                         {appointment.statusLabel}
                                       </span>
                                     </div>
-                                    <div className="mt-1 text-sm font-semibold leading-tight">
+                                    <div className="mt-0.5 truncate text-xs font-semibold leading-tight">
                                       {appointment.clientName}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {appointment.therapistName}
                                     </div>
                                   </li>
                                 ))}
                               </ul>
+                              {extraAppointments > 0 && (
+                                <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                                  +{extraAppointments} más
+                                </p>
+                              )}
                             </ScrollArea>
                           )}
                         </CardContent>
