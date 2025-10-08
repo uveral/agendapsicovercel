@@ -1,6 +1,58 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
+
+const ADMIN_EMAILS = new Set(
+  DEFAULT_ADMIN_EMAILS.concat(
+    (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+);
+
+function resolveRole(
+  profileRole: string | null | undefined,
+  fallbackRole: string,
+): 'admin' | 'therapist' | string {
+  return (profileRole ?? fallbackRole) as 'admin' | 'therapist' | string;
+}
+
+function resolveTherapistId(
+  profileTherapistId: string | null | undefined,
+  metadataTherapistId: string | null,
+) {
+  return profileTherapistId ?? metadataTherapistId ?? null;
+}
+
+function getFallbackRole(
+  email: string,
+  metadataRole: string | null | undefined,
+): 'admin' | 'therapist' {
+  if (ADMIN_EMAILS.has(email.toLowerCase())) {
+    return 'admin';
+  }
+  return (metadataRole as 'admin' | 'therapist' | undefined) ?? 'therapist';
+}
+
+function getMetadataRole(user: { user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown> }) {
+  return (
+    (user.user_metadata?.role as string | undefined) ??
+    (user.app_metadata?.role as string | undefined) ??
+    null
+  );
+}
+
+function getMetadataTherapistId(user: { user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown> }) {
+  const metaTherapist =
+    (user.user_metadata?.therapist_id as string | undefined) ??
+    (user.app_metadata?.therapist_id as string | undefined) ??
+    null;
+
+  return metaTherapist;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,18 +69,21 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const email = user.email?.toLowerCase() ?? '';
+  const fallbackRole = getFallbackRole(email, getMetadataRole(user));
+  const metadataTherapistId = getMetadataTherapistId(user);
+
+  const { data: profile } = await supabase
     .from('users')
     .select('role, therapist_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (profileError || !profile) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const resolvedRole = resolveRole(profile?.role, fallbackRole);
+  const resolvedTherapistId = resolveTherapistId(profile?.therapist_id, metadataTherapistId);
 
-  const isAdmin = profile.role === 'admin';
-  const isOwnSchedule = profile.therapist_id === id;
+  const isAdmin = resolvedRole === 'admin';
+  const isOwnSchedule = resolvedTherapistId === id;
 
   if (!isAdmin && !isOwnSchedule) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -45,7 +100,7 @@ export async function GET(
   }
 
   // Convert snake_case to camelCase
-  const camelCaseSchedule = schedule.map((slot: Record<string, unknown>) => ({
+  const camelCaseSchedule = (schedule ?? []).map((slot: Record<string, unknown>) => ({
     id: slot.id,
     therapistId: slot.therapist_id,
     dayOfWeek: slot.day_of_week,
@@ -75,18 +130,21 @@ export async function PUT(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const email = user.email?.toLowerCase() ?? '';
+  const fallbackRole = getFallbackRole(email, getMetadataRole(user));
+  const metadataTherapistId = getMetadataTherapistId(user);
+
+  const { data: profile } = await supabase
     .from('users')
     .select('role, therapist_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (profileError || !profile) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const resolvedRole = resolveRole(profile?.role, fallbackRole);
+  const resolvedTherapistId = resolveTherapistId(profile?.therapist_id, metadataTherapistId);
 
-  const isAdmin = profile.role === 'admin';
-  const isOwnSchedule = profile.therapist_id === id;
+  const isAdmin = resolvedRole === 'admin';
+  const isOwnSchedule = resolvedTherapistId === id;
 
   if (!isAdmin && !isOwnSchedule) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
