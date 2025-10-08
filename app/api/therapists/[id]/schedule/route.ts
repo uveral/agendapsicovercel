@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { sanitizeWorkingHoursCollection } from '@/lib/therapistSchedule';
 
@@ -166,13 +166,17 @@ export async function PUT(
     })),
   );
 
+  const writeClient = isAdmin ? await createAdminClient() : supabase;
+
   // Delete existing schedule
-  await supabase
+  const { error: deleteError } = await writeClient
     .from('therapist_working_hours')
     .delete()
     .eq('therapist_id', id);
 
-  let newSchedule = null;
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
 
   if (sanitizedInput.length > 0) {
     const dbSlots = sanitizedInput.map((slot) => ({
@@ -182,19 +186,27 @@ export async function PUT(
       end_time: slot.endTime,
     }));
 
-    const response = await supabase
+    const response = await writeClient
       .from('therapist_working_hours')
       .insert(dbSlots)
       .select();
-
-    newSchedule = response.data;
 
     if (response.error) {
       return NextResponse.json({ error: response.error.message }, { status: 500 });
     }
   }
 
-  const sanitizedResponse = sanitizeWorkingHoursCollection(newSchedule ?? []);
+  const { data: persistedSchedule, error: fetchError } = await writeClient
+    .from('therapist_working_hours')
+    .select('*')
+    .eq('therapist_id', id)
+    .order('day_of_week');
+
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  }
+
+  const sanitizedResponse = sanitizeWorkingHoursCollection(persistedSchedule ?? []);
 
   // Convert snake_case to camelCase
   const camelCaseSchedule = sanitizedResponse.map((slot) => ({

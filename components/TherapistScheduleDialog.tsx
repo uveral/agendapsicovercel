@@ -108,6 +108,7 @@ export function TherapistScheduleDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/therapists", therapistId, "schedule"] });
       queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/therapist-working-hours"] });
       toast({
         title: "Horario guardado",
         description: "El horario del terapeuta ha sido actualizado exitosamente",
