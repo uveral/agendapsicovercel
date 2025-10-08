@@ -128,7 +128,6 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
                 onAppointmentClick?.(apt.id);
               }}
             >
-              {console.log('CalendarView - apt.clientId:', apt.clientId, 'Client Name:', clientNames.get(apt.clientId))}
               {apt.startTime} - {clientNames.get(apt.clientId) || 'Cliente Desconocido'}
             </div>
           ))}
