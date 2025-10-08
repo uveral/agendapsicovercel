@@ -112,7 +112,7 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
                 onAppointmentClick?.(apt.id);
               }}
             >
-              {apt.startTime}
+              {apt.id}
             </div>
           ))}
         </div>
