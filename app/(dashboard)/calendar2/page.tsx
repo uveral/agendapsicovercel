@@ -29,7 +29,9 @@ function CalendarContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
 
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  // FIX: useMemo to prevent creating new Date on every render
+  const today = useMemo(() => new Date(), []);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(today);
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
@@ -100,8 +102,9 @@ function CalendarContent() {
   // DEBUG: Log render
   console.log('[Calendar2] Rendering. therapists:', therapists.length, 'appointments:', appointments.length, 'selectedDate:', selectedDate);
 
-  if (isLoadingTherapists) {
-    console.log('[Calendar2] Loading therapists...');
+  // CRITICAL FIX: Don't render heavy components until we have all data
+  if (isLoadingTherapists || therapists.length === 0) {
+    console.log('[Calendar2] Loading therapists... (blocking heavy component render)');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>

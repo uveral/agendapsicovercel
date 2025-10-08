@@ -96,8 +96,9 @@ function CalendarContent() {
   // DEBUG: Log render
   console.log('[Calendar] Rendering. therapists:', therapists.length, 'appointments:', appointments.length);
 
-  if (isLoadingTherapists) {
-    console.log('[Calendar] Loading therapists...');
+  // CRITICAL FIX: Don't render heavy components until we have all data
+  if (isLoadingTherapists || therapists.length === 0) {
+    console.log('[Calendar] Loading therapists... (blocking heavy component render)');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>
