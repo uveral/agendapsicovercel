@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useMemo, useCallback } from "react";
+import React, { useState, useEffect, Suspense, useMemo, useCallback, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { debounce } from "lodash";
+import { useCalendarState } from "@/hooks/useCalendarState";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
 import { OccupancyGrid } from "@/components/OccupancyGrid";
@@ -24,9 +26,20 @@ import type { Therapist, Appointment, User } from "@/lib/types";
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth(); // Now using centralized context
+  const { user } = useAuth();
+  const [isPending, startTransition] = useTransition();
 
-  console.log('[Calendar] CalendarContent mounted/rendered');
+  // Use Zustand shared state instead of local state
+  const {
+    selectedTherapist,
+    viewType,
+    calendarView,
+    setSelectedTherapist,
+    setViewType,
+    setCalendarView
+  } = useCalendarState();
+
+  console.log('[Calendar] CalendarContent rendered. selectedTherapist:', selectedTherapist);
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
@@ -61,11 +74,7 @@ function CalendarContent() {
     return "all";
   }, [therapistParam, user?.role, user?.therapistId]);
 
-  const [selectedTherapist, setSelectedTherapist] = useState(initialTherapist);
-  const [viewType, setViewType] = useState<"general" | "individual">(
-    therapistParam || (user?.role === "therapist" && user?.therapistId) ? "individual" : "general"
-  );
-  const [calendarView, setCalendarView] = useState<"monthly" | "weekly">("monthly");
+  // Local state that doesn't affect routing
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogContext, setCreateDialogContext] = useState<{
@@ -73,14 +82,33 @@ function CalendarContent() {
     date?: string;
   }>({});
 
-  // Update selected therapist when query param changes
+  // Sync URL params to Zustand state (one-way only: URL → State)
   useEffect(() => {
-    console.log('[Calendar] useEffect - therapistParam changed:', therapistParam);
-    if (therapistParam) {
+    console.log('[Calendar] useEffect - therapistParam:', therapistParam, 'current:', selectedTherapist);
+    if (therapistParam && therapistParam !== selectedTherapist) {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
+    } else if (!therapistParam && initialTherapist !== selectedTherapist) {
+      setSelectedTherapist(initialTherapist);
+      setViewType(initialTherapist === "all" ? "general" : "individual");
     }
-  }, [therapistParam]);
+  }, [therapistParam, initialTherapist]); // Don't include selectedTherapist to avoid loops
+
+  // Debounced URL update function (memoized to prevent recreation)
+  const updateURL = useMemo(
+    () => debounce((value: string) => {
+      console.log('[Calendar] Debounced URL update:', value);
+      startTransition(() => {
+        const url = value !== "all"
+          ? `/calendar?therapist=${value}`
+          : '/calendar';
+
+        // Use window.history.replaceState to avoid triggering navigation events
+        window.history.replaceState({}, '', url);
+      });
+    }, 300),
+    []
+  );
 
   const therapistsList = useMemo(() => {
     console.log('[Calendar] Recalculating therapistsList');
@@ -93,19 +121,17 @@ function CalendarContent() {
   const handleTherapistChange = useCallback((value: string) => {
     console.log('[Calendar] handleTherapistChange:', value);
     if (value === selectedTherapist) {
-      console.log('[Calendar] Same therapist selected, skipping navigation');
-      return; // Avoid navigation if no change
+      console.log('[Calendar] Same therapist selected, skipping');
+      return;
     }
 
+    // Update state immediately (UI responds instantly)
     setSelectedTherapist(value);
-    if (value !== "all") {
-      setViewType("individual");
-      router.replace(`/calendar?therapist=${value}`); // Use replace instead of push
-    } else {
-      setViewType("general");
-      router.replace("/calendar"); // Use replace instead of push
-    }
-  }, [router, selectedTherapist]);
+    setViewType(value !== "all" ? "individual" : "general");
+
+    // Update URL with debounce (avoid multiple navigation events)
+    updateURL(value);
+  }, [selectedTherapist, setSelectedTherapist, setViewType, updateURL]);
 
   const handleDayClick = useCallback((therapistId: string, date: string) => {
     console.log('[Calendar] handleDayClick:', therapistId, date);

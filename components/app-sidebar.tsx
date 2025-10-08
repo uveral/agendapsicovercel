@@ -59,7 +59,33 @@ const menuItems = [
     url: '/appointments',
     icon: Clock,
   },
-];
+] as const;
+
+// Separate MenuItem component to prevent re-renders
+const MenuItem = memo(({
+  item,
+  isActive
+}: {
+  item: typeof menuItems[number];
+  isActive: boolean;
+}) => {
+  console.log('[MenuItem] Rendering:', item.title, 'active:', isActive);
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={isActive}
+      >
+        <Link href={item.url}>
+          <item.icon className="h-4 w-4" />
+          <span>{item.title}</span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+});
+
+MenuItem.displayName = 'MenuItem';
 
 // Memoize the entire sidebar to prevent unnecessary re-renders
 export const AppSidebar = memo(function AppSidebar() {
@@ -71,18 +97,19 @@ export const AppSidebar = memo(function AppSidebar() {
   // DEBUG: Log sidebar renders
   console.log('[AppSidebar] Rendering. pathname:', pathname, 'user:', user?.email, 'loading:', loading);
 
-  const isAdmin = user?.role === 'admin';
+  // Memoize active states calculation
+  const activeStates = useMemo(() => {
+    console.log('[AppSidebar] Recalculating activeStates for pathname:', pathname);
+    return menuItems.reduce((acc, item) => {
+      acc[item.url] = pathname === item.url;
+      return acc;
+    }, {} as Record<string, boolean>);
+  }, [pathname]);
 
-  const handleLogout = React.useCallback(async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    toast({
-      title: 'Sesión cerrada',
-      description: 'Has cerrado sesión exitosamente',
-    });
-    router.push('/login');
-    router.refresh();
-  }, [router, toast]);
+  // Memoize visible menu items (filter settings for non-admins)
+  const visibleMenuItems = useMemo(() => {
+    return menuItems;
+  }, []);
 
   // Show loading state to prevent flashing
   if (loading) {
@@ -111,66 +138,78 @@ export const AppSidebar = memo(function AppSidebar() {
           <SidebarGroupLabel>Navegación</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              {visibleMenuItems.map((item) => (
+                <MenuItem
+                  key={item.url}
+                  item={item}
+                  isActive={activeStates[item.url] || false}
+                />
               ))}
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === '/settings'}
-                  >
-                    <Link href="/settings">
-                      <Settings className="h-4 w-4" />
-                      <span>Configuración</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              {user?.role === 'admin' && (
+                <MenuItem
+                  item={{ title: 'Configuración', url: '/settings', icon: Settings }}
+                  isActive={activeStates['/settings'] || false}
+                />
               )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <div className="flex flex-col gap-2">
-          {user && (
-            <div className="flex items-center gap-2 text-sm">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback>
-                  {user.firstName?.[0]}{user.lastName?.[0]}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col">
-                <span className="font-medium">
-                  {user.firstName} {user.lastName}
-                </span>
-                <span className="text-xs text-muted-foreground capitalize">
-                  {user.role}
-                </span>
-              </div>
-            </div>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLogout}
-            className="w-full"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Cerrar Sesión
-          </Button>
-        </div>
-      </SidebarFooter>
+      <SidebarFooterContent user={user} />
     </Sidebar>
   );
 });
+
+// Separate footer component to minimize re-renders
+const SidebarFooterContent = memo(({ user }: { user: any }) => {
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleLogout = useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    toast({
+      title: 'Sesión cerrada',
+      description: 'Has cerrado sesión exitosamente',
+    });
+    router.push('/login');
+    router.refresh();
+  }, [router, toast]);
+
+  console.log('[SidebarFooterContent] Rendering');
+
+  return (
+    <SidebarFooter className="p-4">
+      <div className="flex flex-col gap-2">
+        {user && (
+          <div className="flex items-center gap-2 text-sm">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback>
+                {user.firstName?.[0]}{user.lastName?.[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <span className="font-medium">
+                {user.firstName} {user.lastName}
+              </span>
+              <span className="text-xs text-muted-foreground capitalize">
+                {user.role}
+              </span>
+            </div>
+          </div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleLogout}
+          className="w-full"
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Cerrar Sesión
+        </Button>
+      </div>
+    </SidebarFooter>
+  );
+});
+
+SidebarFooterContent.displayName = 'SidebarFooterContent';

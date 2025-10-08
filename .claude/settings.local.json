@@ -29,7 +29,9 @@
       "Bash(npm run type-check:*)",
       "Bash(git restore:*)",
       "Bash(npm run dev:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(npm install zustand lodash)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []
