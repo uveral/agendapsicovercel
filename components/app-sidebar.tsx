@@ -67,6 +67,9 @@ export function AppSidebar() {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // DEBUG: Log sidebar renders
+  console.log('[AppSidebar] Rendering. pathname:', pathname, 'user:', user?.email);
+
   const isAdmin = user?.role === 'admin';
 
   const handleLogout = async () => {

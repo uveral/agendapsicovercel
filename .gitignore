@@ -39,3 +39,4 @@ next-env.d.ts
 # old structure (can be removed after migration)
 server/public
 vite.config.ts.*
+Trace-*.json
