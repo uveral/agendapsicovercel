@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarView } from "@/components/CalendarView"; // Using CalendarView instead of TherapistMonthView
 import { WeekCalendar } from "@/components/WeekCalendar";
@@ -78,34 +78,40 @@ function CalendarContent() {
     }
   }, [therapistParam]);
 
-  const therapistsList = useMemo(() => [
-    { id: "all", name: "Todos los terapeutas" },
-    ...therapists.map((t) => ({ id: t.id, name: t.name })),
-  ], [therapists]);
+  const therapistsList = useMemo(() => {
+    console.log('[Calendar3] Recalculating therapistsList');
+    return [
+      { id: "all", name: "Todos los terapeutas" },
+      ...therapists.map((t) => ({ id: t.id, name: t.name })),
+    ];
+  }, [therapists]);
 
-  const handleTherapistChange = (value: string) => {
+  const handleTherapistChange = useCallback((value: string) => {
+    console.log('[Calendar3] handleTherapistChange:', value);
     setSelectedTherapist(value);
     if (value !== "all") {
       setViewType("individual");
-      router.push(`/calendar3?therapist=${value}`); // Changed to calendar3
+      router.push(`/calendar3?therapist=${value}`);
     } else {
       setViewType("general");
-      router.push("/calendar3"); // Changed to calendar3
+      router.push("/calendar3");
     }
-  };
+  }, [router]);
 
   // DEBUG: Log render
   console.log('[Calendar3] Rendering. therapists:', therapists.length, 'appointments:', appointments.length);
 
-  const handleDayClick = (therapistId: string, date: string) => {
+  const handleDayClick = useCallback((therapistId: string, date: string) => {
+    console.log('[Calendar3] handleDayClick:', therapistId, date);
     setCreateDialogContext({ therapistId, date });
     setCreateDialogOpen(true);
-  };
+  }, []);
 
-  const handleCalendarViewDayClick = (date: Date) => {
+  const handleCalendarViewDayClick = useCallback((date: Date) => {
+    console.log('[Calendar3] handleCalendarViewDayClick:', date);
     setCreateDialogContext({ therapistId: selectedTherapist, date: date.toISOString().split('T')[0] });
     setCreateDialogOpen(true);
-  };
+  }, [selectedTherapist]);
 
   // CRITICAL FIX: Don't render heavy components until we have all data
   if (isLoadingTherapists || therapists.length === 0) {

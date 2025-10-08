@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useMemo, lazy } from "react";
+import React, { useState, useEffect, Suspense, useMemo, useCallback, lazy } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
@@ -78,12 +78,16 @@ function CalendarContent() {
     }
   }, [therapistParam]);
 
-  const therapistsList = useMemo(() => [
-    { id: "all", name: "Todos los terapeutas" },
-    ...therapists.map((t) => ({ id: t.id, name: t.name })),
-  ], [therapists]);
+  const therapistsList = useMemo(() => {
+    console.log('[Calendar2] Recalculating therapistsList');
+    return [
+      { id: "all", name: "Todos los terapeutas" },
+      ...therapists.map((t) => ({ id: t.id, name: t.name })),
+    ];
+  }, [therapists]);
 
-  const handleTherapistChange = (value: string) => {
+  const handleTherapistChange = useCallback((value: string) => {
+    console.log('[Calendar2] handleTherapistChange:', value);
     setSelectedTherapist(value);
     if (value !== "all") {
       setViewType("individual");
@@ -92,12 +96,13 @@ function CalendarContent() {
       setViewType("general");
       router.push("/calendar2");
     }
-  };
+  }, [router]);
 
-  const handleDayClick = (therapistId: string, date: string) => {
+  const handleDayClick = useCallback((therapistId: string, date: string) => {
+    console.log('[Calendar2] handleDayClick:', therapistId, date);
     setCreateDialogContext({ therapistId, date });
     setCreateDialogOpen(true);
-  };
+  }, []);
 
   // DEBUG: Log render
   console.log('[Calendar2] Rendering. therapists:', therapists.length, 'appointments:', appointments.length, 'selectedDate:', selectedDate);
