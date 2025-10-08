@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useMemo } from "react";
+import React, { useState, useEffect, Suspense, useMemo, lazy } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TherapistMonthView } from "@/components/TherapistMonthView";
 import { WeekCalendar } from "@/components/WeekCalendar";
-import { DayOccupancyGrid } from "@/components/DayOccupancyGrid";
-import { DayAvailabilitySummary } from "@/components/DayAvailabilitySummary";
+// LAZY LOAD HEAVY COMPONENTS FOR DEBUGGING
+const DayOccupancyGrid = lazy(() => import("@/components/DayOccupancyGrid").then(mod => ({ default: mod.DayOccupancyGrid })));
+const DayAvailabilitySummary = lazy(() => import("@/components/DayAvailabilitySummary").then(mod => ({ default: mod.DayAvailabilitySummary })));
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { RenderDetector } from "@/components/RenderDetector";
+// import { RenderDetector } from "@/components/RenderDetector"; // DISABLED FOR DEBUGGING
 import {
   Select,
   SelectContent,
@@ -68,6 +69,7 @@ function CalendarContent() {
 
   // Update selected therapist when query param changes
   useEffect(() => {
+    console.log('[Calendar2] useEffect - therapistParam changed:', therapistParam);
     if (therapistParam) {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
@@ -95,7 +97,11 @@ function CalendarContent() {
     setCreateDialogOpen(true);
   };
 
+  // DEBUG: Log render
+  console.log('[Calendar2] Rendering. therapists:', therapists.length, 'appointments:', appointments.length, 'selectedDate:', selectedDate);
+
   if (isLoadingTherapists) {
+    console.log('[Calendar2] Loading therapists...');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>
@@ -104,7 +110,7 @@ function CalendarContent() {
   }
 
   return (
-    <RenderDetector name="CalendarPage">
+    // <RenderDetector name="CalendarPage"> // DISABLED FOR DEBUGGING
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -150,20 +156,25 @@ function CalendarContent() {
                 <Calendar
                     mode="single"
                     selected={selectedDate}
-                    onSelect={setSelectedDate}
+                    onSelect={(date) => {
+                      console.log('[Calendar2] Date selected:', date);
+                      setSelectedDate(date);
+                    }}
                     className="rounded-md border"
                 />
                 <div className="flex-1 space-y-4">
-                    <DayOccupancyGrid
-                        therapists={therapists}
-                        appointments={appointments}
-                        selectedDate={selectedDate || new Date()}
-                        onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                    />
-                    <DayAvailabilitySummary
-                        appointments={appointments}
-                        selectedDate={selectedDate || new Date()}
-                    />
+                    <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Cargando vista del día...</div>}>
+                      <DayOccupancyGrid
+                          therapists={therapists}
+                          appointments={appointments}
+                          selectedDate={selectedDate || new Date()}
+                          onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                      />
+                      <DayAvailabilitySummary
+                          appointments={appointments}
+                          selectedDate={selectedDate || new Date()}
+                      />
+                    </Suspense>
                 </div>
             </div>
         </TabsContent>
@@ -234,7 +245,7 @@ function CalendarContent() {
         }}
       />
     </div>
-    </RenderDetector>
+    // </RenderDetector> // DISABLED FOR DEBUGGING
   );
 }
 

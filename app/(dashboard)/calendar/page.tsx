@@ -9,7 +9,7 @@ import { AvailabilitySummary } from "@/components/AvailabilitySummary";
 import { AppointmentEditDialog } from "@/components/AppointmentEditDialog";
 import CreateAppointmentDialog from "@/components/CreateAppointmentDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { RenderDetector } from "@/components/RenderDetector";
+// import { RenderDetector } from "@/components/RenderDetector"; // DISABLED FOR DEBUGGING
 import {
   Select,
   SelectContent,
@@ -65,6 +65,7 @@ function CalendarContent() {
 
   // Update selected therapist when query param changes
   useEffect(() => {
+    console.log('[Calendar] useEffect - therapistParam changed:', therapistParam);
     if (therapistParam) {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
@@ -92,7 +93,11 @@ function CalendarContent() {
     setCreateDialogOpen(true);
   };
 
+  // DEBUG: Log render
+  console.log('[Calendar] Rendering. therapists:', therapists.length, 'appointments:', appointments.length);
+
   if (isLoadingTherapists) {
+    console.log('[Calendar] Loading therapists...');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>
@@ -101,7 +106,7 @@ function CalendarContent() {
   }
 
   return (
-    <RenderDetector name="CalendarPage">
+    // <RenderDetector name="CalendarPage"> // DISABLED FOR DEBUGGING
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -143,24 +148,25 @@ function CalendarContent() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-6">
-          <RenderDetector name="OccupancyGrid">
+          {/* <RenderDetector name="OccupancyGrid"> */}
             <OccupancyGrid
               therapists={therapists}
               appointments={appointments}
               onAppointmentClick={(id) => setEditingAppointmentId(id)}
             />
-          </RenderDetector>
+          {/* </RenderDetector> */}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {therapists.map((therapist) => (
-              <RenderDetector key={therapist.id} name={`AvailabilitySummary-${therapist.id}`}>
+              // <RenderDetector key={therapist.id} name={`AvailabilitySummary-${therapist.id}`}>
                 <AvailabilitySummary
+                  key={therapist.id}
                   therapistId={therapist.id}
                   therapistName={therapist.name}
                   appointments={appointments}
                   showTherapistName={true}
                 />
-              </RenderDetector>
+              // </RenderDetector>
             ))}
           </div>
         </TabsContent>
@@ -258,7 +264,7 @@ function CalendarContent() {
         }}
       />
     </div>
-    </RenderDetector>
+    // </RenderDetector> // DISABLED FOR DEBUGGING
   );
 }
 
