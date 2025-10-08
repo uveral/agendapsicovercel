@@ -67,6 +67,7 @@ export default function Calendar3Page() {
               <CalendarView // Render CalendarView for weekly view as well
                 appointments={appointments || []}
                 selectedTherapist={selectedTherapist}
+                clients={clients || []}
               />
             ) : (
               <p>Select a therapist to view weekly calendar</p>
