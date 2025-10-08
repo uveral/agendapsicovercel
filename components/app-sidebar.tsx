@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext'; // Use centralized context
+import type { User } from '@/lib/types';
 
 const menuItems = [
   {
@@ -159,7 +160,7 @@ export const AppSidebar = memo(function AppSidebar() {
 });
 
 // Separate footer component to minimize re-renders
-const SidebarFooterContent = memo(({ user }: { user: { firstName?: string; lastName?: string; role?: string } | null }) => {
+const SidebarFooterContent = memo(({ user }: { user: User | null }) => {
   const router = useRouter();
   const { toast } = useToast();
 
