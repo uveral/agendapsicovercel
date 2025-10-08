@@ -43,6 +43,9 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
 
   const calendarGrid = useMemo(() => getCalendarGrid(currentYear, currentMonth), [currentYear, currentMonth]);
 
+  console.log('CalendarView - appointments prop:', appointments);
+  console.log('CalendarView - selectedTherapist prop:', selectedTherapist);
+
   const appointmentsByDate = useMemo(() => {
     const map = new Map<string, Appointment[]>();
     appointments.forEach((apt) => {
@@ -54,6 +57,7 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
         map.get(date)?.push(apt);
       }
     });
+    console.log('CalendarView - appointmentsByDate map:', map);
     return map;
   }, [appointments, selectedTherapist]);
 
@@ -89,6 +93,7 @@ export function CalendarView({ appointments, selectedTherapist, onAppointmentCli
     }
 
     const dayAppointments = appointmentsByDate.get(day.toDateString()) || [];
+    console.log('CalendarView - dayAppointments:', dayAppointments);
 
     return (
       <div
