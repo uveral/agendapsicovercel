@@ -18,7 +18,7 @@ import { es as esLocale } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Loader2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -280,6 +280,69 @@ function GlobalDayCell({
   );
 }
 
+const ALL_THERAPISTS_VALUE = '__all__';
+
+interface TherapistMonthCalendarProps {
+  therapist: TherapistOption;
+  appointments: AppointmentsByDate;
+  currentMonth: Date;
+  monthGrid: Date[][];
+  showWeekends: boolean;
+}
+
+function TherapistMonthCalendar({
+  therapist,
+  appointments,
+  currentMonth,
+  monthGrid,
+  showWeekends,
+}: TherapistMonthCalendarProps) {
+  const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: esLocale });
+
+  return (
+    <Card>
+      <CardHeader className="px-4 pb-0 pt-4 sm:px-6 sm:pb-2">
+        <CardTitle className="text-lg font-semibold capitalize">
+          {monthLabel} — {therapist.name}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 pt-4 sm:px-6 sm:pb-6">
+        <div className="grid gap-4">
+          <div className={cn('grid gap-2', showWeekends ? 'grid-cols-7' : 'grid-cols-5')}>
+            {(showWeekends ? DAY_LABELS_FULL : DAY_LABELS_WEEK).map((label) => (
+              <div key={label} className="text-center text-xs font-semibold uppercase text-muted-foreground">
+                {label}
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-2">
+            {monthGrid.map((week, weekIndex) => (
+              <div
+                key={weekIndex}
+                className={cn('grid gap-2', showWeekends ? 'grid-cols-7' : 'grid-cols-5')}
+              >
+                {week.map((day) => {
+                  const isoDate = format(day, 'yyyy-MM-dd');
+                  const dayAppointments = appointments.get(isoDate) ?? [];
+
+                  return (
+                    <AppointmentDayCell
+                      key={isoDate}
+                      day={day}
+                      appointments={dayAppointments}
+                      isCurrentMonth={isSameMonth(day, currentMonth)}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CalendarPage() {
   const { user, loading: authLoading } = useAuth();
   const settings = useAppSettingsValue();
@@ -297,7 +360,9 @@ export default function CalendarPage() {
 
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
   const [viewMode, setViewMode] = useState<'personal' | 'global'>('personal');
-  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() => therapistOwnId ?? '');
+  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() =>
+    isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '',
+  );
 
   const appointmentsByTherapist = useMemo(
     () => groupAppointmentsByTherapist(appointments),
@@ -330,17 +395,49 @@ export default function CalendarPage() {
   }, [baseTherapists, canViewOthers, isAdmin, therapistOwnId]);
 
   useEffect(() => {
-    if (selectedTherapistId && visibleTherapists.some((therapist) => therapist.id === selectedTherapistId)) {
+    if (visibleTherapists.length === 0) {
       return;
     }
+
+    if (isAdmin) {
+      if (
+        selectedTherapistId === ALL_THERAPISTS_VALUE ||
+        (selectedTherapistId &&
+          visibleTherapists.some((therapist) => therapist.id === selectedTherapistId))
+      ) {
+        return;
+      }
+
+      setSelectedTherapistId(ALL_THERAPISTS_VALUE);
+      return;
+    }
+
+    if (
+      selectedTherapistId &&
+      visibleTherapists.some((therapist) => therapist.id === selectedTherapistId)
+    ) {
+      return;
+    }
+
     if (therapistOwnId && visibleTherapists.some((therapist) => therapist.id === therapistOwnId)) {
       setSelectedTherapistId(therapistOwnId);
       return;
     }
-    if (visibleTherapists.length > 0) {
-      setSelectedTherapistId(visibleTherapists[0].id);
+
+    setSelectedTherapistId(visibleTherapists[0].id);
+  }, [isAdmin, therapistOwnId, selectedTherapistId, visibleTherapists]);
+
+  const resolvedSelectedTherapistId =
+    selectedTherapistId ||
+    (isAdmin && visibleTherapists.length > 0
+      ? ALL_THERAPISTS_VALUE
+      : visibleTherapists[0]?.id ?? '');
+
+  useEffect(() => {
+    if (!selectedTherapistId && resolvedSelectedTherapistId) {
+      setSelectedTherapistId(resolvedSelectedTherapistId);
     }
-  }, [therapistOwnId, selectedTherapistId, visibleTherapists]);
+  }, [resolvedSelectedTherapistId, selectedTherapistId]);
 
   const monthGrid = useMemo(
     () => buildMonthGrid(currentMonth, settings.showWeekends),
@@ -408,9 +505,14 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
           ) : (
-            <Tabs value={selectedTherapistId} onValueChange={setSelectedTherapistId}>
+            <Tabs value={resolvedSelectedTherapistId} onValueChange={setSelectedTherapistId}>
               <ScrollArea className="w-full">
                 <TabsList className="mt-2 w-max">
+                  {isAdmin && (
+                    <TabsTrigger value={ALL_THERAPISTS_VALUE} className="whitespace-nowrap">
+                      Todos los terapeutas
+                    </TabsTrigger>
+                  )}
                   {visibleTherapists.map((therapist) => (
                     <TabsTrigger key={therapist.id} value={therapist.id} className="whitespace-nowrap">
                       {therapist.name}
@@ -419,46 +521,38 @@ export default function CalendarPage() {
                 </TabsList>
               </ScrollArea>
 
+              {isAdmin && (
+                <TabsContent value={ALL_THERAPISTS_VALUE} className="mt-6 space-y-6">
+                  {visibleTherapists.map((therapist) => {
+                    const therapistAppointments =
+                      appointmentsByTherapist.get(therapist.id) ?? new Map();
+
+                    return (
+                      <TherapistMonthCalendar
+                        key={therapist.id}
+                        therapist={therapist}
+                        appointments={therapistAppointments}
+                        currentMonth={currentMonth}
+                        monthGrid={monthGrid}
+                        showWeekends={settings.showWeekends}
+                      />
+                    );
+                  })}
+                </TabsContent>
+              )}
+
               {visibleTherapists.map((therapist) => {
                 const therapistAppointments = appointmentsByTherapist.get(therapist.id) ?? new Map();
 
                 return (
                   <TabsContent key={therapist.id} value={therapist.id} className="mt-6">
-                    <Card>
-                      <CardContent className="p-4 sm:p-6">
-                        <div className="grid gap-4">
-                          <div className={cn('grid gap-2', settings.showWeekends ? 'grid-cols-7' : 'grid-cols-5')}>
-                            {(settings.showWeekends ? DAY_LABELS_FULL : DAY_LABELS_WEEK).map((label) => (
-                              <div key={label} className="text-center text-xs font-semibold uppercase text-muted-foreground">
-                                {label}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="grid gap-2">
-                            {monthGrid.map((week, weekIndex) => (
-                              <div
-                                key={weekIndex}
-                                className={cn('grid gap-2', settings.showWeekends ? 'grid-cols-7' : 'grid-cols-5')}
-                              >
-                                {week.map((day) => {
-                                  const isoDate = format(day, 'yyyy-MM-dd');
-                                  const dayAppointments = therapistAppointments.get(isoDate) ?? [];
-
-                                  return (
-                                    <AppointmentDayCell
-                                      key={isoDate}
-                                      day={day}
-                                      appointments={dayAppointments}
-                                      isCurrentMonth={isSameMonth(day, currentMonth)}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <TherapistMonthCalendar
+                      therapist={therapist}
+                      appointments={therapistAppointments}
+                      currentMonth={currentMonth}
+                      monthGrid={monthGrid}
+                      showWeekends={settings.showWeekends}
+                    />
                   </TabsContent>
                 );
               })}
