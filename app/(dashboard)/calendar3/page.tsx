@@ -56,25 +56,38 @@ export default function Calendar3Page() {
         </Button>
       </div>
       <div className="grid grid-cols-1 gap-4">
-        <div>
-          {calendarView === 'monthly' ? (
-            <CalendarView
-              appointments={appointments || []}
-              selectedTherapist={selectedTherapist}
-              clients={clients || []}
-            />
-          ) : (
-            selectedTherapistData ? (
-              <CalendarView // Render CalendarView for weekly view as well
+        {selectedTherapist === 'all' ? (
+          therapists.map((therapist) => (
+            <div key={therapist.id} className="space-y-4">
+              <h2 className="text-xl font-semibold">{therapist.name}</h2>
+              <CalendarView
+                appointments={appointments || []}
+                selectedTherapist={therapist.id}
+                clients={clients || []}
+              />
+            </div>
+          ))
+        ) : (
+          <div>
+            {calendarView === 'monthly' ? (
+              <CalendarView
                 appointments={appointments || []}
                 selectedTherapist={selectedTherapist}
                 clients={clients || []}
               />
             ) : (
-              <p>Select a therapist to view weekly calendar</p>
-            )
-          )}
-        </div>
+              selectedTherapistData ? (
+                <CalendarView // Render CalendarView for weekly view as well
+                  appointments={appointments || []}
+                  selectedTherapist={selectedTherapist}
+                  clients={clients || []}
+                />
+              ) : (
+                <p>Select a therapist to view weekly calendar</p>
+              )
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
