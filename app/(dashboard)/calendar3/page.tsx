@@ -33,7 +33,7 @@ export default function Calendar3Page() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Calendar 3 - Phase 4: Implement WeekCalendar (without WeekCalendar component)</h1>
+      <h1 className="text-2xl font-bold">Calendario</h1>
       <TherapistSelector
         therapists={therapists || []}
         selectedTherapist={selectedTherapist}
