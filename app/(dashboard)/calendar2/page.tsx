@@ -27,7 +27,11 @@ import { Calendar } from "@/components/ui/calendar";
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  // TEMP FIX: Comment out useAuth to test if multiple instances cause render loops
+  // const { user } = useAuth();
+  const user = null; // Temporarily disable to test
+
+  console.log('[Calendar2] CalendarContent mounted/rendered');
 
   // FIX: useMemo to prevent creating new Date on every render
   const today = useMemo(() => new Date(), []);

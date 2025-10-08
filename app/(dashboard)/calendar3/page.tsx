@@ -27,7 +27,11 @@ import { getAppointments, getTherapists, getUsers } from '@/lib/api';
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  // TEMP FIX: Comment out useAuth to test if multiple instances cause render loops
+  // const { user } = useAuth();
+  const user = null; // Temporarily disable to test
+
+  console.log('[Calendar3] CalendarContent mounted/rendered');
 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 

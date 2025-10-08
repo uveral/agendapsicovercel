@@ -25,7 +25,11 @@ import type { Therapist, Appointment, User } from "@/lib/types";
 function CalendarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  // TEMP FIX: Comment out useAuth to test if multiple instances cause render loops
+  // const { user } = useAuth();
+  const user = null; // Temporarily disable to test
+
+  console.log('[Calendar] CalendarContent mounted/rendered');
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
