@@ -27,7 +27,7 @@ function CalendarContent() {
   const searchParams = useSearchParams();
   // TEMP FIX: Comment out useAuth to test if multiple instances cause render loops
   // const { user } = useAuth();
-  const user = null; // Temporarily disable to test
+  const user: User | null = null; // Temporarily disable to test
 
   console.log('[Calendar] CalendarContent mounted/rendered');
 
