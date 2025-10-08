@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { sanitizeWorkingHoursCollection } from '@/lib/therapistSchedule';
 
 const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
 
@@ -99,15 +100,17 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const sanitizedSchedule = sanitizeWorkingHoursCollection(schedule ?? []);
+
   // Convert snake_case to camelCase
-  const camelCaseSchedule = (schedule ?? []).map((slot: Record<string, unknown>) => ({
+  const camelCaseSchedule = sanitizedSchedule.map((slot) => ({
     id: slot.id,
-    therapistId: slot.therapist_id,
-    dayOfWeek: slot.day_of_week,
-    startTime: slot.start_time,
-    endTime: slot.end_time,
-    createdAt: slot.created_at,
-    updatedAt: slot.updated_at,
+    therapistId: slot.therapistId,
+    dayOfWeek: slot.dayOfWeek,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    createdAt: slot.createdAt,
+    updatedAt: slot.updatedAt,
   }));
 
   return NextResponse.json(camelCaseSchedule);
@@ -154,38 +157,54 @@ export async function PUT(
     return NextResponse.json({ error: 'Formato de datos inválido' }, { status: 400 });
   }
 
+  const sanitizedInput = sanitizeWorkingHoursCollection(
+    slots.map((slot: Record<string, unknown>) => ({
+      therapist_id: id,
+      day_of_week: (slot as Record<string, unknown>).dayOfWeek,
+      start_time: (slot as Record<string, unknown>).startTime,
+      end_time: (slot as Record<string, unknown>).endTime,
+    })),
+  );
+
   // Delete existing schedule
   await supabase
     .from('therapist_working_hours')
     .delete()
     .eq('therapist_id', id);
 
-  // Insert new schedule
-  const dbSlots = slots.map((slot: Record<string, unknown>) => ({
-    therapist_id: id,
-    day_of_week: slot.dayOfWeek,
-    start_time: slot.startTime,
-    end_time: slot.endTime,
-  }));
+  let newSchedule = null;
 
-  const { data: newSchedule, error } = await supabase
-    .from('therapist_working_hours')
-    .insert(dbSlots)
-    .select();
+  if (sanitizedInput.length > 0) {
+    const dbSlots = sanitizedInput.map((slot) => ({
+      therapist_id: slot.therapistId,
+      day_of_week: slot.dayOfWeek,
+      start_time: slot.startTime,
+      end_time: slot.endTime,
+    }));
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const response = await supabase
+      .from('therapist_working_hours')
+      .insert(dbSlots)
+      .select();
+
+    newSchedule = response.data;
+
+    if (response.error) {
+      return NextResponse.json({ error: response.error.message }, { status: 500 });
+    }
   }
 
+  const sanitizedResponse = sanitizeWorkingHoursCollection(newSchedule ?? []);
+
   // Convert snake_case to camelCase
-  const camelCaseSchedule = (newSchedule || []).map((slot: Record<string, unknown>) => ({
+  const camelCaseSchedule = sanitizedResponse.map((slot) => ({
     id: slot.id,
-    therapistId: slot.therapist_id,
-    dayOfWeek: slot.day_of_week,
-    startTime: slot.start_time,
-    endTime: slot.end_time,
-    createdAt: slot.created_at,
-    updatedAt: slot.updated_at,
+    therapistId: slot.therapistId,
+    dayOfWeek: slot.dayOfWeek,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    createdAt: slot.createdAt,
+    updatedAt: slot.updatedAt,
   }));
 
   return NextResponse.json(camelCaseSchedule);
