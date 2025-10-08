@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, type ComponentType } from 'react';
+import { useMemo, useState, useCallback, type ComponentType } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -21,130 +21,189 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-interface LinkDescriptor {
+type Role = 'admin' | 'therapist' | 'client' | 'guest';
+
+type NavItem = {
   id: string;
-  title: string;
+  label: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
-  roles?: Array<'admin' | 'therapist' | 'assistant'>;
+  roles?: Role[];
+};
+
+type NavSection = {
+  id: string;
+  label: string;
+  items: NavItem[];
+};
+
+const NAV_BLUEPRINT: NavSection[] = [
+  {
+    id: 'core',
+    label: 'General',
+    items: [
+      { id: 'dashboard', label: 'Panel Principal', href: '/dashboard', icon: LayoutDashboard },
+      { id: 'therapists', label: 'Terapeutas', href: '/therapists', icon: Users },
+      { id: 'clients', label: 'Clientes', href: '/clients', icon: UserRound },
+    ],
+  },
+  {
+    id: 'calendars',
+    label: 'Calendarios',
+    items: [
+      { id: 'calendar-1', label: 'Calendario 1', href: '/calendar', icon: CalendarDays },
+      { id: 'calendar-2', label: 'Calendario 2', href: '/calendar2', icon: CalendarPlus },
+      { id: 'calendar-3', label: 'Calendario 3', href: '/calendar3', icon: CalendarRange },
+      { id: 'calendar-4', label: 'Calendario 4', href: '/calendar4', icon: CalendarClock },
+      { id: 'appointments', label: 'Citas', href: '/appointments', icon: CalendarCheck },
+    ],
+  },
+  {
+    id: 'admin',
+    label: 'Administración',
+    items: [
+      { id: 'settings', label: 'Configuración', href: '/settings', icon: Settings, roles: ['admin'] },
+    ],
+  },
+];
+
+function getSectionsForRole(role: Role): NavSection[] {
+  return NAV_BLUEPRINT.map((section) => {
+    const items = section.items.filter((item) => {
+      if (!item.roles || item.roles.length === 0) {
+        return true;
+      }
+      return item.roles.includes(role);
+    });
+
+    return { ...section, items };
+  }).filter((section) => section.items.length > 0);
 }
 
-const CORE_LINKS: LinkDescriptor[] = [
-  { id: 'dashboard', title: 'Panel Principal', href: '/dashboard', icon: LayoutDashboard },
-  { id: 'therapists', title: 'Terapeutas', href: '/therapists', icon: Users },
-  { id: 'clients', title: 'Clientes', href: '/clients', icon: UserRound },
-];
-
-const CALENDAR_LINKS: LinkDescriptor[] = [
-  { id: 'calendar-1', title: 'Calendario 1', href: '/calendar', icon: CalendarDays },
-  { id: 'calendar-2', title: 'Calendario 2', href: '/calendar2', icon: CalendarPlus },
-  { id: 'calendar-3', title: 'Calendario 3', href: '/calendar3', icon: CalendarRange },
-  { id: 'calendar-4', title: 'Calendario 4', href: '/calendar4', icon: CalendarClock },
-  { id: 'appointments', title: 'Citas', href: '/appointments', icon: CalendarCheck },
-];
-
-const ADMIN_LINKS: LinkDescriptor[] = [
-  { id: 'settings', title: 'Configuración', href: '/settings', icon: Settings, roles: ['admin'] },
-];
-
-function buildNavigation(userRole: string | null | undefined): LinkDescriptor[] {
-  const allowed = new Set([userRole ?? '']);
-
-  return [...CORE_LINKS, ...CALENDAR_LINKS, ...ADMIN_LINKS].filter((item) => {
-    if (!item.roles || item.roles.length === 0) {
-      return true;
-    }
-    return item.roles.some((role) => allowed.has(role));
-  });
-}
-
-function NavigationList({
-  items,
-  currentPath,
-}: {
-  items: LinkDescriptor[];
+type NavigationProps = {
+  sections: NavSection[];
   currentPath: string;
-}) {
-  return (
-    <SidebarMenu>
-      {items.map((item) => {
-        const Icon = item.icon;
-        const isActive = currentPath === item.href;
+};
 
-        return (
-          <SidebarMenuItem key={item.id}>
-            <SidebarMenuButton asChild isActive={isActive}>
-              <Link href={item.href} className="flex items-center gap-2">
-                <Icon className="h-4 w-4" />
-                <span className="truncate">{item.title}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        );
-      })}
-    </SidebarMenu>
+function Navigation({ sections, currentPath }: NavigationProps) {
+  return (
+    <>
+      {sections.map((section) => (
+        <SidebarGroup key={section.id} className="mt-1">
+          <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
+                        <Icon className="h-4 w-4" />
+                        <span className="truncate text-sm font-medium">{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ))}
+    </>
+  );
+}
+
+function LoadingSidebar() {
+  return (
+    <Sidebar>
+      <SidebarHeader className="p-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
+          <div className="flex-1">
+            <div className="h-3 w-32 animate-pulse rounded bg-muted" />
+          </div>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <div className="space-y-4 p-4 text-sm text-muted-foreground">
+          <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-9 w-full animate-pulse rounded bg-muted" />
+            ))}
+          </div>
+        </div>
+      </SidebarContent>
+    </Sidebar>
   );
 }
 
 export function AppSidebar() {
+  const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const { user, loading } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const menuItems = useMemo(() => buildNavigation(user?.role), [user?.role]);
+  const role: Role = (user?.role as Role | undefined) ?? 'guest';
+
+  const sections = useMemo(() => getSectionsForRole(role), [role]);
 
   const initials = useMemo(() => {
-    if (!user) return '';
-    const first = user.firstName?.charAt(0) ?? '';
-    const last = user.lastName?.charAt(0) ?? '';
-    return `${first}${last}`.toUpperCase() || 'US';
+    if (!user) return 'US';
+    const first = user.firstName?.trim().charAt(0) ?? '';
+    const last = user.lastName?.trim().charAt(0) ?? '';
+    const value = `${first}${last}`.toUpperCase();
+    return value || 'US';
   }, [user]);
 
   const fullName = useMemo(() => {
     if (!user) return 'Usuario';
-    return [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Usuario';
+    const parts = [user.firstName, user.lastName].filter(Boolean);
+    return parts.join(' ') || 'Usuario';
   }, [user]);
 
   const handleLogout = useCallback(async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
+    const supabase = createClient();
+
     try {
-      const supabase = createClient();
       await supabase.auth.signOut();
+      toast({ title: 'Sesión cerrada', description: 'Vuelve pronto.' });
+      router.replace('/login');
+    } catch (error) {
+      console.error('[AppSidebar] Error signing out', error);
       toast({
-        title: 'Sesión cerrada',
-        description: 'Vuelve pronto',
+        title: 'Error al cerrar sesión',
+        description: 'Inténtalo de nuevo en unos instantes.',
+        variant: 'destructive',
       });
-      router.push('/login');
     } finally {
       setIsSigningOut(false);
     }
   }, [isSigningOut, router, toast]);
 
   if (loading) {
-    return (
-      <Sidebar>
-        <SidebarContent>
-          <div className="p-4 text-sm text-muted-foreground">Preparando menú...</div>
-        </SidebarContent>
-      </Sidebar>
-    );
+    return <LoadingSidebar />;
   }
 
   return (
@@ -159,26 +218,24 @@ export function AppSidebar() {
             className="h-10 w-auto"
             priority
           />
-          <span className="text-sm font-semibold leading-tight">Agenda Centro Orienta</span>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold leading-tight">Agenda Centro Orienta</span>
+            <span className="text-xs text-muted-foreground">Organiza tu día</span>
+          </div>
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navegación</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <NavigationList items={menuItems} currentPath={pathname} />
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <Navigation sections={sections} currentPath={pathname} />
       </SidebarContent>
       <SidebarFooter className="p-4">
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-3">
             <Avatar className="h-9 w-9">
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="font-medium leading-none">{fullName}</span>
-              <span className="text-xs text-muted-foreground capitalize">{user?.role ?? 'invitado'}</span>
+              <span className="text-sm font-medium leading-none">{fullName}</span>
+              <span className="text-xs text-muted-foreground capitalize">{role}</span>
             </div>
           </div>
           <Button
@@ -190,7 +247,7 @@ export function AppSidebar() {
             disabled={isSigningOut}
           >
             <LogOut className="mr-2 h-4 w-4" />
-            {isSigningOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}
+            {isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
           </Button>
         </div>
       </SidebarFooter>
