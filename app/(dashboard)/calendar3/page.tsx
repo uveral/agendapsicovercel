@@ -56,9 +56,8 @@ export default function Calendar3Page() {
         </Button>
       </div>
       <div className="grid grid-cols-1 gap-4">
-        {selectedTherapist === 'all' ? (
-          therapists.map((therapist) => (
-            <div key={therapist.id} className="space-y-4">
+                 {selectedTherapist === 'all' ? (
+                   therapists?.map((therapist) => (            <div key={therapist.id} className="space-y-4">
               <h2 className="text-xl font-semibold">{therapist.name}</h2>
               <CalendarView
                 appointments={appointments || []}
