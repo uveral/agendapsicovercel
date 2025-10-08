@@ -55,14 +55,15 @@ export default function Calendar3Page() {
           Vista Semanal
         </Button>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4">
+        <div>
           {calendarView === 'monthly' ? (
-                          <CalendarView
-                            appointments={appointments || []}
-                            selectedTherapist={selectedTherapist}
-                            clients={clients || []}
-                          />          ) : (
+            <CalendarView
+              appointments={appointments || []}
+              selectedTherapist={selectedTherapist}
+              clients={clients || []}
+            />
+          ) : (
             selectedTherapistData ? (
               <CalendarView // Render CalendarView for weekly view as well
                 appointments={appointments || []}
@@ -73,12 +74,6 @@ export default function Calendar3Page() {
               <p>Select a therapist to view weekly calendar</p>
             )
           )}
-        </div>
-        <div>
-          <SimpleOccupancyGrid
-            therapists={therapists || []}
-            appointments={appointments || []}
-          />
         </div>
       </div>
     </div>
