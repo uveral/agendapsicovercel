@@ -65,12 +65,15 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
     return map;
   }, [appointments, selectedTherapist]);
 
+  console.log('CalendarView - clients prop:', clients);
+
   const clientNames = useMemo(() => {
     const map = new Map<string, string>();
     clients.forEach((client) => {
       const name = `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email?.split('@')[0] || 'Cliente';
       map.set(client.id, name);
     });
+    console.log('CalendarView - clientNames map:', map);
     return map;
   }, [clients]);
 
@@ -119,12 +122,13 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
           {dayAppointments.map(apt => (
             <div
               key={apt.id}
-              className="bg-blue-100 rounded-sm px-1 truncate"
+              className="rounded-sm px-1 truncate"
               onClick={(e) => {
                 e.stopPropagation(); // Prevent day click from firing
                 onAppointmentClick?.(apt.id);
               }}
             >
+              {console.log('CalendarView - apt.clientId:', apt.clientId, 'Client Name:', clientNames.get(apt.clientId))}
               {apt.startTime} - {clientNames.get(apt.clientId) || 'Cliente Desconocido'}
             </div>
           ))}
