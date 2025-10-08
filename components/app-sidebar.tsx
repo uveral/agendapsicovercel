@@ -66,7 +66,7 @@ const MenuItem = memo(({
   item,
   isActive
 }: {
-  item: typeof menuItems[number];
+  item: { title: string; url: string; icon: React.ComponentType<{ className?: string }> };
   isActive: boolean;
 }) => {
   console.log('[MenuItem] Rendering:', item.title, 'active:', isActive);
