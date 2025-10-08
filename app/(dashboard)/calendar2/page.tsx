@@ -33,9 +33,8 @@ function CalendarContent() {
 
   console.log('[Calendar2] CalendarContent mounted/rendered');
 
-  // FIX: useMemo to prevent creating new Date on every render
-  const today = useMemo(() => new Date(), []);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(today);
+  // FIX: Use lazy initialization to prevent creating new Date on every render
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
@@ -91,15 +90,20 @@ function CalendarContent() {
 
   const handleTherapistChange = useCallback((value: string) => {
     console.log('[Calendar2] handleTherapistChange:', value);
+    if (value === selectedTherapist) {
+      console.log('[Calendar2] Same therapist selected, skipping navigation');
+      return; // Avoid navigation if no change
+    }
+
     setSelectedTherapist(value);
     if (value !== "all") {
       setViewType("individual");
-      router.push(`/calendar2?therapist=${value}`);
+      router.replace(`/calendar2?therapist=${value}`); // Use replace instead of push
     } else {
       setViewType("general");
-      router.push("/calendar2");
+      router.replace("/calendar2"); // Use replace instead of push
     }
-  }, [router]);
+  }, [router, selectedTherapist]);
 
   const handleDayClick = useCallback((therapistId: string, date: string) => {
     console.log('[Calendar2] handleDayClick:', therapistId, date);

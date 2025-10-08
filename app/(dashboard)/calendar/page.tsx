@@ -89,15 +89,20 @@ function CalendarContent() {
 
   const handleTherapistChange = useCallback((value: string) => {
     console.log('[Calendar] handleTherapistChange:', value);
+    if (value === selectedTherapist) {
+      console.log('[Calendar] Same therapist selected, skipping navigation');
+      return; // Avoid navigation if no change
+    }
+
     setSelectedTherapist(value);
     if (value !== "all") {
       setViewType("individual");
-      router.push(`/calendar?therapist=${value}`);
+      router.replace(`/calendar?therapist=${value}`); // Use replace instead of push
     } else {
       setViewType("general");
-      router.push("/calendar");
+      router.replace("/calendar"); // Use replace instead of push
     }
-  }, [router]);
+  }, [router, selectedTherapist]);
 
   const handleDayClick = useCallback((therapistId: string, date: string) => {
     console.log('[Calendar] handleDayClick:', therapistId, date);

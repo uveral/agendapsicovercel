@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { memo } from 'react';
 import { Calendar, Users, UserCircle, LayoutDashboard, Clock, Settings, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -61,7 +61,8 @@ const menuItems = [
   },
 ];
 
-export function AppSidebar() {
+// Memoize the entire sidebar to prevent unnecessary re-renders
+export const AppSidebar = memo(function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -161,4 +162,4 @@ export function AppSidebar() {
       </SidebarFooter>
     </Sidebar>
   );
-}
+});

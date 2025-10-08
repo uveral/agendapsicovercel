@@ -33,7 +33,8 @@ function CalendarContent() {
 
   console.log('[Calendar3] CalendarContent mounted/rendered');
 
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  // FIX: Use lazy initialization to prevent creating new Date on every render
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
 
   // Parse query params
   const therapistParam = searchParams?.get('therapist');
@@ -91,15 +92,20 @@ function CalendarContent() {
 
   const handleTherapistChange = useCallback((value: string) => {
     console.log('[Calendar3] handleTherapistChange:', value);
+    if (value === selectedTherapist) {
+      console.log('[Calendar3] Same therapist selected, skipping navigation');
+      return; // Avoid navigation if no change
+    }
+
     setSelectedTherapist(value);
     if (value !== "all") {
       setViewType("individual");
-      router.push(`/calendar3?therapist=${value}`);
+      router.replace(`/calendar3?therapist=${value}`); // Use replace instead of push
     } else {
       setViewType("general");
-      router.push("/calendar3");
+      router.replace("/calendar3"); // Use replace instead of push
     }
-  }, [router]);
+  }, [router, selectedTherapist]);
 
   // DEBUG: Log render
   console.log('[Calendar3] Rendering. therapists:', therapists.length, 'appointments:', appointments.length);
