@@ -1,112 +1,102 @@
-
 'use client';
 
-import React, { memo, useMemo, useCallback } from 'react';
-import { Calendar, Users, UserCircle, LayoutDashboard, Clock, Settings, LogOut } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
+import {
+  LayoutDashboard,
+  Users,
+  UserCircle,
+  CalendarDays,
+  CalendarPlus,
+  CalendarRange,
+  CalendarClock,
+  Clock,
+  Settings,
+  LogOut,
+} from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarHeader,
-  SidebarFooter,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext'; // Use centralized context
-import type { User } from '@/lib/types';
+import { useAuth } from '@/contexts/AuthContext';
+import type { LucideIcon } from 'lucide-react';
 
-const menuItems = [
-  {
-    title: 'Dashboard',
-    url: '/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Terapeutas',
-    url: '/therapists',
-    icon: Users,
-  },
-  {
-    title: 'Clientes',
-    url: '/clients',
-    icon: UserCircle,
-  },
-  {
-    title: 'Calendario',
-    url: '/calendar',
-    icon: Calendar,
-  },
-  {
-    title: 'Calendario 2',
-    url: '/calendar2',
-    icon: Calendar,
-  },
-  {
-    title: 'Calendario 3',
-    url: '/calendar3',
-    icon: Calendar,
-  },
-  {
-    title: 'Citas',
-    url: '/appointments',
-    icon: Clock,
-  },
-] as const;
+interface NavigationItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  adminOnly?: boolean;
+}
 
-// Separate MenuItem component to prevent re-renders
-const MenuItem = memo(({
-  item,
-  isActive
-}: {
-  item: { title: string; url: string; icon: React.ComponentType<{ className?: string }> };
-  isActive: boolean;
-}) => {
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={isActive}
-      >
-        <Link href={item.url}>
-          <item.icon className="h-4 w-4" />
-          <span>{item.title}</span>
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-});
+const NAVIGATION: NavigationItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Terapeutas', href: '/therapists', icon: Users },
+  { label: 'Clientes', href: '/clients', icon: UserCircle },
+  { label: 'Calendario', href: '/calendar', icon: CalendarDays },
+  { label: 'Calendario 2', href: '/calendar2', icon: CalendarPlus },
+  { label: 'Calendario 3', href: '/calendar3', icon: CalendarRange },
+  { label: 'Calendario 4', href: '/calendar4', icon: CalendarClock },
+  { label: 'Citas', href: '/appointments', icon: Clock },
+  { label: 'Configuración', href: '/settings', icon: Settings, adminOnly: true },
+];
 
-MenuItem.displayName = 'MenuItem';
+function buildMenuItems(items: NavigationItem[], currentPath: string) {
+  return items.map((item) => {
+    const isActive = currentPath === item.href;
 
-// Memoize the entire sidebar to prevent unnecessary re-renders
-export const AppSidebar = memo(function AppSidebar() {
+    return (
+      <SidebarMenuItem key={item.href}>
+        <SidebarMenuButton asChild isActive={isActive}>
+          <Link href={item.href}>
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  });
+}
+
+export function AppSidebar() {
   const pathname = usePathname();
-  const { user, loading } = useAuth(); // Use centralized context
+  const router = useRouter();
+  const { toast } = useToast();
+  const { user, loading } = useAuth();
 
-  // DEBUG: Log sidebar renders
-  // Memoize active states calculation
-  const activeStates = useMemo(() => {
-    return menuItems.reduce((acc, item) => {
-      acc[item.url] = pathname === item.url;
-      return acc;
-    }, {} as Record<string, boolean>);
-  }, [pathname]);
+  const visibleNavigation = useMemo(() => {
+    if (!user || user.role !== 'admin') {
+      return NAVIGATION.filter((item) => !item.adminOnly);
+    }
+    return NAVIGATION;
+  }, [user]);
 
-  // Memoize visible menu items (filter settings for non-admins)
-  const visibleMenuItems = useMemo(() => {
-    return menuItems;
-  }, []);
+  const menuContent = useMemo(() => buildMenuItems(visibleNavigation, pathname), [visibleNavigation, pathname]);
 
-  // Show loading state to prevent flashing
+  const handleSignOut = useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    toast({
+      title: 'Sesión cerrada',
+      description: 'Has cerrado sesión exitosamente',
+    });
+    router.push('/login');
+    router.refresh();
+  }, [router, toast]);
+
   if (loading) {
     return (
       <Sidebar>
@@ -120,89 +110,41 @@ export const AppSidebar = memo(function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <img
-            src="/logo-centro-orienta.svg"
-            alt="Centro Orienta Logo"
-            className="h-10 w-auto"
-          />
-        </div>
+        <Link href="/dashboard" className="flex items-center gap-3">
+          <Image src="/logo-centro-orienta.svg" alt="Centro Orienta" width={40} height={40} className="h-10 w-auto" />
+          <div className="font-semibold">Agenda Centro Orienta</div>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Navegación</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {visibleMenuItems.map((item) => (
-                <MenuItem
-                  key={item.url}
-                  item={item}
-                  isActive={activeStates[item.url] || false}
-                />
-              ))}
-              {user?.role === 'admin' && (
-                <MenuItem
-                  item={{ title: 'Configuración', url: '/settings', icon: Settings }}
-                  isActive={activeStates['/settings'] || false}
-                />
-              )}
-            </SidebarMenu>
+            <SidebarMenu>{menuContent}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooterContent user={user} />
+      <SidebarFooter className="p-4">
+        <div className="flex flex-col gap-3">
+          {user && (
+            <div className="flex items-center gap-2 text-sm">
+              <Avatar className="h-9 w-9">
+                <AvatarFallback>
+                  {user.firstName?.[0]}
+                  {user.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="font-medium">{`${user.firstName ?? ''} ${user.lastName ?? ''}`.trim()}</span>
+                <span className="text-xs text-muted-foreground capitalize">{user.role}</span>
+              </div>
+            </div>
+          )}
+          <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleSignOut}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Cerrar Sesión
+          </Button>
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
-});
-
-// Separate footer component to minimize re-renders
-const SidebarFooterContent = memo(({ user }: { user: User | null }) => {
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const handleLogout = useCallback(async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    toast({
-      title: 'Sesión cerrada',
-      description: 'Has cerrado sesión exitosamente',
-    });
-    router.push('/login');
-    router.refresh();
-  }, [router, toast]);
-
-  return (
-    <SidebarFooter className="p-4">
-      <div className="flex flex-col gap-2">
-        {user && (
-          <div className="flex items-center gap-2 text-sm">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback>
-                {user.firstName?.[0]}{user.lastName?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="font-medium">
-                {user.firstName} {user.lastName}
-              </span>
-              <span className="text-xs text-muted-foreground capitalize">
-                {user.role}
-              </span>
-            </div>
-          </div>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleLogout}
-          className="w-full"
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Cerrar Sesión
-        </Button>
-      </div>
-    </SidebarFooter>
-  );
-});
-
-SidebarFooterContent.displayName = 'SidebarFooterContent';
+}
