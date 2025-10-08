@@ -54,7 +54,12 @@ export function TherapistScheduleDialog({
   const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
 
   // Load existing schedule
-  const { data: existingSchedule = [], isLoading } = useQuery<TherapistWorkingHours[]>({
+  const {
+    data: existingSchedule = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery<TherapistWorkingHours[]>({
     queryKey: ["/api/therapists", therapistId, "schedule"],
     enabled: open,
   });
@@ -63,9 +68,13 @@ export function TherapistScheduleDialog({
   // The length check prevents overwriting user edits
   useEffect(() => {
     if (open) {
-      if (existingSchedule.length > 0) {
+      const scheduleArray = Array.isArray(existingSchedule)
+        ? existingSchedule
+        : [];
+
+      if (scheduleArray.length > 0) {
         // Convert from DB format (0=Sunday) to UI format (0=Monday)
-        const slots = existingSchedule.map((slot) => ({
+        const slots = scheduleArray.map((slot) => ({
           dayOfWeek: (slot.dayOfWeek + 6) % 7,
           startTime: slot.startTime,
           endTime: slot.endTime,
@@ -154,6 +163,12 @@ export function TherapistScheduleDialog({
         {isLoading ? (
           <div className="py-8 text-center text-muted-foreground">
             Cargando horarios...
+          </div>
+        ) : isError ? (
+          <div className="py-8 text-center text-destructive">
+            {error instanceof Error
+              ? error.message
+              : "No se pudieron cargar los horarios"}
           </div>
         ) : (
           <ScrollArea className="max-h-[500px] pr-4">
