@@ -23,6 +23,7 @@ export function SimpleOccupancyGrid({ therapists, appointments }: SimpleOccupanc
       if (apt.status === 'cancelled') return;
       const aptDate = new Date(apt.date);
       if (aptDate.toDateString() === today.toDateString()) {
+        if (!apt.startTime || !apt.endTime) return; // Add this check
         const [startHour] = apt.startTime.split(':').map(Number);
         const [endHour] = apt.endTime.split(':').map(Number);
         for (let hour = startHour; hour < endHour; hour++) {
