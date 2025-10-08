@@ -47,17 +47,20 @@ function CalendarContent() {
   });
 
   // Determine initial selected therapist based on user role
+  // TEMP: Simplified without user dependency
   const initialTherapist = useMemo(() => {
     if (therapistParam) return therapistParam;
-    if (user?.role === "therapist" && user?.therapistId) {
-      return user.therapistId;
-    }
+    // Temporarily disabled user-based logic
+    // if (user?.role === "therapist" && user?.therapistId) {
+    //   return user.therapistId;
+    // }
     return "all";
-  }, [therapistParam, user?.role, user?.therapistId]);
+  }, [therapistParam]);
 
   const [selectedTherapist, setSelectedTherapist] = useState(initialTherapist);
+  // TEMP: Simplified without user dependency
   const [viewType, setViewType] = useState<"general" | "individual">(
-    therapistParam || (user?.role === "therapist" && user?.therapistId) ? "individual" : "general"
+    therapistParam ? "individual" : "general"
   );
   const [calendarView, setCalendarView] = useState<"monthly" | "weekly">("monthly");
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
