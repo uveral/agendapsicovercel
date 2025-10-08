@@ -1,8 +1,9 @@
 'use client';
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -12,42 +13,153 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Calendar as DayPicker } from '@/components/ui/calendar';
+import { Calendar as DateCalendar } from '@/components/ui/calendar';
+import { OccupancyGrid } from '@/components/OccupancyGrid';
 import { TherapistMonthView } from '@/components/TherapistMonthView';
 import { WeekCalendar } from '@/components/WeekCalendar';
+import { AvailabilitySummary } from '@/components/AvailabilitySummary';
 import { AppointmentEditDialog } from '@/components/AppointmentEditDialog';
 import CreateAppointmentDialog from '@/components/CreateAppointmentDialog';
-import { AvailabilitySummary } from '@/components/AvailabilitySummary';
+import { DayOccupancyGrid } from '@/components/DayOccupancyGrid';
+import { DayAvailabilitySummary } from '@/components/DayAvailabilitySummary';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Appointment, Therapist, User } from '@/lib/types';
 
-const DayOccupancyGrid = lazy(() =>
-  import('@/components/DayOccupancyGrid').then((mod) => ({ default: mod.DayOccupancyGrid }))
-);
+type ActiveTab = 'overview' | 'personal';
+type PersonalView = 'month' | 'week';
 
-const DayAvailabilitySummary = lazy(() =>
-  import('@/components/DayAvailabilitySummary').then((mod) => ({ default: mod.DayAvailabilitySummary }))
-);
-
-const OccupancyGrid = lazy(() =>
-  import('@/components/OccupancyGrid').then((mod) => ({ default: mod.OccupancyGrid }))
-);
-
-type ViewMode = 'general' | 'individual';
-type ScheduleView = 'monthly' | 'weekly';
-
-type CreateDialogState = {
+type CreateDialogPayload = {
   open: boolean;
   therapistId?: string;
-  date?: string;
+  dateISO?: string;
 };
 
-function CalendarWorkspace() {
+function OverviewSection({
+  therapists,
+  appointments,
+  selectedDate,
+  onSelectDate,
+  onAppointmentClick,
+}: {
+  therapists: Therapist[];
+  appointments: Appointment[];
+  selectedDate: Date;
+  onSelectDate: (date: Date) => void;
+  onAppointmentClick: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
+        <DateCalendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(date) => date && onSelectDate(date)}
+          className="rounded-md border"
+        />
+        <div className="space-y-4">
+          <DayOccupancyGrid
+            therapists={therapists}
+            appointments={appointments}
+            selectedDate={selectedDate}
+            onAppointmentClick={onAppointmentClick}
+          />
+          <DayAvailabilitySummary appointments={appointments} selectedDate={selectedDate} />
+        </div>
+      </div>
+
+      <OccupancyGrid
+        therapists={therapists}
+        appointments={appointments}
+        onAppointmentClick={onAppointmentClick}
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {therapists.map((therapist) => (
+          <AvailabilitySummary
+            key={therapist.id}
+            therapistId={therapist.id}
+            therapistName={therapist.name}
+            appointments={appointments}
+            showTherapistName
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PersonalSection({
+  therapistId,
+  therapistName,
+  appointments,
+  clients,
+  onDayClick,
+  onAppointmentClick,
+}: {
+  therapistId: string;
+  therapistName: string;
+  appointments: Appointment[];
+  clients: User[];
+  onDayClick: (therapistId: string, dateISO: string) => void;
+  onAppointmentClick: (id: string) => void;
+}) {
+  const [viewMode, setViewMode] = useState<PersonalView>('month');
+
+  useEffect(() => {
+    setViewMode('month');
+  }, [therapistId]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={viewMode === 'month' ? 'default' : 'outline'}
+          onClick={() => setViewMode('month')}
+          data-testid="button-view-monthly"
+        >
+          Vista Mensual
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={viewMode === 'week' ? 'default' : 'outline'}
+          onClick={() => setViewMode('week')}
+          data-testid="button-view-weekly"
+        >
+          Vista Semanal
+        </Button>
+      </div>
+
+      {viewMode === 'month' ? (
+        <TherapistMonthView
+          therapistId={therapistId}
+          therapistName={therapistName}
+          appointments={appointments}
+          clients={clients}
+          onAppointmentClick={onAppointmentClick}
+          onDayClick={onDayClick}
+        />
+      ) : (
+        <WeekCalendar
+          therapistId={therapistId}
+          therapistName={therapistName}
+          appointments={appointments}
+          clients={clients}
+          onAppointmentClick={onAppointmentClick}
+        />
+      )}
+
+      <AvailabilitySummary therapistId={therapistId} appointments={appointments} />
+    </div>
+  );
+}
+
+export default function Calendar4Page() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-
-  const therapistFromQuery = searchParams?.get('therapist') ?? null;
 
   const { data: therapists = [], isLoading: loadingTherapists } = useQuery<Therapist[]>({
     queryKey: ['/api/therapists'],
@@ -70,25 +182,11 @@ function CalendarWorkspace() {
     refetchOnWindowFocus: false,
   });
 
-  const inferredDefaultTherapist = useMemo(() => {
-    if (therapistFromQuery) return therapistFromQuery;
-    if (user?.role === 'therapist' && user.therapistId) {
-      return user.therapistId;
-    }
-    return 'all';
-  }, [therapistFromQuery, user?.role, user?.therapistId]);
-
-  const [selectedTherapist, setSelectedTherapist] = useState<string>(inferredDefaultTherapist);
-  const [viewMode, setViewMode] = useState<ViewMode>(inferredDefaultTherapist === 'all' ? 'general' : 'individual');
-  const [scheduleView, setScheduleView] = useState<ScheduleView>('monthly');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+  const [selectedTherapist, setSelectedTherapist] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
-  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
-  const [createDialog, setCreateDialog] = useState<CreateDialogState>({ open: false });
-
-  useEffect(() => {
-    setSelectedTherapist((prev) => (prev === inferredDefaultTherapist ? prev : inferredDefaultTherapist));
-    setViewMode(inferredDefaultTherapist === 'all' ? 'general' : 'individual');
-  }, [inferredDefaultTherapist]);
+  const [editingAppointment, setEditingAppointment] = useState<string | null>(null);
+  const [createDialog, setCreateDialog] = useState<CreateDialogPayload>({ open: false });
 
   const therapistOptions = useMemo(
     () => [
@@ -98,31 +196,46 @@ function CalendarWorkspace() {
     [therapists]
   );
 
-  const handleTherapistChange = useCallback(
-    (value: string) => {
-      if (value === selectedTherapist) return;
+  const therapistLabel = useMemo(() => {
+    return therapistOptions.find((option) => option.value === selectedTherapist)?.label ?? '';
+  }, [selectedTherapist, therapistOptions]);
 
-      setSelectedTherapist(value);
-      setViewMode(value === 'all' ? 'general' : 'individual');
-      setScheduleView('monthly');
+  const therapistParam = searchParams?.get('therapist');
 
-      const destination = value === 'all' ? '/calendar4' : `/calendar4?therapist=${value}`;
-      router.replace(destination);
-    },
-    [router, selectedTherapist]
-  );
+  useEffect(() => {
+    const therapistFromContext =
+      user?.role === 'therapist' && user.therapistId ? user.therapistId : 'all';
+    const resolvedTherapist = therapistParam ?? therapistFromContext;
 
-  const openCreateDialog = useCallback((therapistId?: string, date?: string) => {
-    setCreateDialog({ open: true, therapistId, date });
+    setSelectedTherapist((prev) => (prev === resolvedTherapist ? prev : resolvedTherapist));
+    setActiveTab(resolvedTherapist === 'all' ? 'overview' : 'personal');
+  }, [therapistParam, user?.role, user?.therapistId]);
+
+  const openCreateDialog = useCallback((therapistId?: string, dateISO?: string) => {
+    setCreateDialog({ open: true, therapistId, dateISO });
   }, []);
 
   const closeCreateDialog = useCallback(() => {
     setCreateDialog({ open: false });
   }, []);
 
-  const handleDayClick = useCallback(
-    (therapistId: string, date: string) => {
-      openCreateDialog(therapistId, date);
+  const handleTherapistChange = useCallback(
+    (value: string) => {
+      setSelectedTherapist(value);
+      const nextTab = value === 'all' ? 'overview' : 'personal';
+      setActiveTab(nextTab);
+      if (value === 'all') {
+        router.replace('/calendar4');
+      } else {
+        router.replace(`/calendar4?therapist=${value}`);
+      }
+    },
+    [router]
+  );
+
+  const handleDayCreate = useCallback(
+    (therapistId: string, dateISO: string) => {
+      openCreateDialog(therapistId, dateISO);
     },
     [openCreateDialog]
   );
@@ -140,7 +253,9 @@ function CalendarWorkspace() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Calendario 4</h1>
-          <p className="text-muted-foreground">Gestiona la agenda diaria y por terapeuta desde una sola vista.</p>
+          <p className="text-muted-foreground">
+            Una vista combinada con el resumen diario y el detalle por terapeuta.
+          </p>
         </div>
 
         <Select value={selectedTherapist} onValueChange={handleTherapistChange}>
@@ -149,7 +264,11 @@ function CalendarWorkspace() {
           </SelectTrigger>
           <SelectContent>
             {therapistOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value} data-testid={`select-item-therapist-${option.value}`}>
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                data-testid={`select-item-therapist-${option.value}`}
+              >
                 {option.label}
               </SelectItem>
             ))}
@@ -157,131 +276,55 @@ function CalendarWorkspace() {
         </Select>
       </div>
 
-      <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)} data-testid="tabs-view-mode">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)}>
         <TabsList>
-          <TabsTrigger value="general" data-testid="tab-general">
+          <TabsTrigger value="overview" data-testid="tab-general">
             Vista General
           </TabsTrigger>
-          <TabsTrigger value="individual" data-testid="tab-individual">
+          <TabsTrigger value="personal" data-testid="tab-individual">
             Vista Individual
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="space-y-6 pt-6">
-          <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
-            <DayPicker
-              mode="single"
-              selected={selectedDate}
-              onSelect={(date) => date && setSelectedDate(date)}
-              className="rounded-md border"
-            />
-            <div className="space-y-4">
-              <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Cargando ocupación diaria...</div>}>
-                <DayOccupancyGrid
-                  therapists={therapists}
-                  appointments={appointments}
-                  selectedDate={selectedDate}
-                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                />
-                <DayAvailabilitySummary appointments={appointments} selectedDate={selectedDate} />
-              </Suspense>
-            </div>
-          </div>
-
-          <Suspense fallback={<div className="p-6 text-center text-muted-foreground">Preparando vista mensual...</div>}>
-            <OccupancyGrid
-              therapists={therapists}
-              appointments={appointments}
-              onAppointmentClick={(id) => setEditingAppointmentId(id)}
-            />
-          </Suspense>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {therapists.map((therapist) => (
-              <AvailabilitySummary
-                key={therapist.id}
-                therapistId={therapist.id}
-                therapistName={therapist.name}
-                appointments={appointments}
-                showTherapistName
-              />
-            ))}
-          </div>
+        <TabsContent value="overview" className="pt-6">
+          <OverviewSection
+            therapists={therapists}
+            appointments={appointments}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            onAppointmentClick={(id) => setEditingAppointment(id)}
+          />
         </TabsContent>
 
-        <TabsContent value="individual" className="space-y-6 pt-6">
+        <TabsContent value="personal" className="pt-6">
           {selectedTherapist === 'all' ? (
             <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground">
-              Selecciona un terapeuta para acceder a su agenda personal.
+              Escoge un terapeuta para revisar su agenda.
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="flex justify-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={scheduleView === 'monthly' ? 'default' : 'outline'}
-                  onClick={() => setScheduleView('monthly')}
-                  data-testid="button-view-monthly"
-                >
-                  Vista Mensual
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={scheduleView === 'weekly' ? 'default' : 'outline'}
-                  onClick={() => setScheduleView('weekly')}
-                  data-testid="button-view-weekly"
-                >
-                  Vista Semanal
-                </Button>
-              </div>
-
-              {scheduleView === 'monthly' ? (
-                <TherapistMonthView
-                  therapistId={selectedTherapist}
-                  therapistName={therapistOptions.find((option) => option.value === selectedTherapist)?.label ?? ''}
-                  appointments={appointments}
-                  clients={clients}
-                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                  onDayClick={handleDayClick}
-                />
-              ) : (
-                <WeekCalendar
-                  therapistId={selectedTherapist}
-                  therapistName={therapistOptions.find((option) => option.value === selectedTherapist)?.label ?? ''}
-                  appointments={appointments}
-                  clients={clients}
-                  onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                />
-              )}
-
-              <AvailabilitySummary therapistId={selectedTherapist} appointments={appointments} />
-            </div>
+            <PersonalSection
+              therapistId={selectedTherapist}
+              therapistName={therapistLabel}
+              appointments={appointments}
+              clients={clients}
+              onAppointmentClick={(id) => setEditingAppointment(id)}
+              onDayClick={handleDayCreate}
+            />
           )}
         </TabsContent>
       </Tabs>
 
-      <AppointmentEditDialog appointmentId={editingAppointmentId} onClose={() => setEditingAppointmentId(null)} />
+      <AppointmentEditDialog
+        appointmentId={editingAppointment}
+        onClose={() => setEditingAppointment(null)}
+      />
 
       <CreateAppointmentDialog
         open={createDialog.open}
         initialTherapistId={createDialog.therapistId}
-        initialDate={createDialog.date}
+        initialDate={createDialog.dateISO}
         onClose={closeCreateDialog}
       />
     </div>
-  );
-}
-
-export default function Calendar4Page() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-64 items-center justify-center text-muted-foreground">Cargando calendario...</div>
-      }
-    >
-      <CalendarWorkspace />
-    </Suspense>
   );
 }
