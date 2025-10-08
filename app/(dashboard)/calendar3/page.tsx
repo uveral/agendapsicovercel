@@ -29,9 +29,7 @@ export default function Calendar3Page() {
     queryFn: getUsers,
   });
 
-  // Another dummy comment to force a new commit
-  // Dummy comment to force a new commit
-  const selectedTherapistData = therapists?.find(t => t.id === selectedTherapist); // Added optional chaining
+  const selectedTherapistData = therapists?.find(t => t.id === selectedTherapist);
 
   return (
     <div className="space-y-4">
@@ -41,22 +39,22 @@ export default function Calendar3Page() {
         selectedTherapist={selectedTherapist}
         onSelectTherapist={setSelectedTherapist}
       />
-      <div className="flex justify-center gap-2 mb-4"> {/* Added */}
-        <Button {/* Added */}
-          variant={calendarView === 'monthly' ? 'default' : 'outline'} {/* Added */}
-          size="sm" {/* Added */}
-          onClick={() => setCalendarView('monthly')} {/* Added */}
-        > {/* Added */}
-          Vista Mensual {/* Added */}
-        </Button> {/* Added */}
-        <Button {/* Added */}
-          variant={calendarView === 'weekly' ? 'default' : 'outline'} {/* Added */}
-          size="sm" {/* Added */}
-          onClick={() => setCalendarView('weekly')} {/* Added */}
-        > {/* Added */}
-          Vista Semanal {/* Added */}
-        </Button> {/* Added */}
-      </div> {/* Added */}
+      <div className="flex justify-center gap-2 mb-4">
+        <Button
+          variant={calendarView === 'monthly' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setCalendarView('monthly')}
+        >
+          Vista Mensual
+        </Button>
+        <Button
+          variant={calendarView === 'weekly' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setCalendarView('weekly')}
+        >
+          Vista Semanal
+        </Button>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           {calendarView === 'monthly' ? ( {/* Modified */}
