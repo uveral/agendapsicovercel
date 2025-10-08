@@ -99,6 +99,11 @@ function CalendarContent() {
     setCreateDialogOpen(true);
   };
 
+  const handleCalendarViewDayClick = (date: Date) => {
+    setCreateDialogContext({ therapistId: selectedTherapist, date: date.toISOString().split('T')[0] });
+    setCreateDialogOpen(true);
+  };
+
   if (isLoadingTherapists) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -185,7 +190,7 @@ function CalendarContent() {
                   selectedTherapist={selectedTherapist}
                   clients={clients}
                   onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                  onDayClick={handleDayClick}
+                  onDayClick={handleCalendarViewDayClick}
                 />
               ) : (
                 <WeekCalendar // Using WeekCalendar
@@ -201,13 +206,13 @@ function CalendarContent() {
             <div className="space-y-6">
               {therapists.map((therapist) => (
                 <div key={therapist.id} className="space-y-4">
-                  <CalendarView // Using CalendarView
-                    appointments={appointments}
-                    selectedTherapist={therapist.id}
-                    clients={clients}
-                    onAppointmentClick={(id) => setEditingAppointmentId(id)}
-                    onDayClick={handleDayClick}
-                  />
+              <CalendarView // Using CalendarView
+                appointments={appointments}
+                selectedTherapist={therapist.id}
+                clients={clients}
+                onAppointmentClick={(id) => setEditingAppointmentId(id)}
+                onDayClick={handleCalendarViewDayClick}
+              />
                   {/* Removed AvailabilitySummary for now */}
                 </div>
               ))}
