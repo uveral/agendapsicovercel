@@ -90,8 +90,6 @@ MenuItem.displayName = 'MenuItem';
 // Memoize the entire sidebar to prevent unnecessary re-renders
 export const AppSidebar = memo(function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { toast } = useToast();
   const { user, loading } = useAuth(); // Use centralized context
 
   // DEBUG: Log sidebar renders
@@ -161,7 +159,7 @@ export const AppSidebar = memo(function AppSidebar() {
 });
 
 // Separate footer component to minimize re-renders
-const SidebarFooterContent = memo(({ user }: { user: any }) => {
+const SidebarFooterContent = memo(({ user }: { user: { firstName?: string; lastName?: string; role?: string } | null }) => {
   const router = useRouter();
   const { toast } = useToast();
 

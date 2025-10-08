@@ -24,10 +24,9 @@ import { useQuery } from "@tanstack/react-query";
 import type { Therapist, Appointment, User } from "@/lib/types";
 
 function CalendarContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   // Use Zustand shared state instead of local state
   const {
@@ -92,7 +91,8 @@ function CalendarContent() {
       setSelectedTherapist(initialTherapist);
       setViewType(initialTherapist === "all" ? "general" : "individual");
     }
-  }, [therapistParam, initialTherapist]); // Don't include selectedTherapist to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [therapistParam, initialTherapist]); // selectedTherapist intentionally omitted to avoid loops
 
   // Debounced URL update function (memoized to prevent recreation)
   const updateURL = useMemo(
