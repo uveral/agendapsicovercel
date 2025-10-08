@@ -120,16 +120,7 @@ export function CalendarView({ appointments, selectedTherapist, clients, onAppoi
         <div>{day.getDate()}</div>
         <div className="text-xs space-y-1">
           {dayAppointments.map(apt => (
-            <div
-              key={apt.id}
-              className="rounded-sm px-1 truncate"
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent day click from firing
-                onAppointmentClick?.(apt.id);
-              }}
-            >
-              {apt.startTime} - {clientNames.get(apt.clientId) || 'Cliente Desconocido'}
-            </div>
+            {apt.startTime} - {clientNames.get(apt.clientId) || 'Cliente Desconocido'}
           ))}
         </div>
       </div>
