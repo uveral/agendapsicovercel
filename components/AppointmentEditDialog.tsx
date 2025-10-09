@@ -52,6 +52,7 @@ import { Calendar, Clock, User as UserIcon, Trash2 } from "lucide-react";
 interface AppointmentEditDialogProps {
   appointmentId: string | null;
   onClose: () => void;
+  initialEditScope?: "this_only" | "this_and_future";
 }
 
 const formSchema = z.object({
@@ -63,9 +64,11 @@ const formSchema = z.object({
 
 type AppointmentFormData = z.infer<typeof formSchema>;
 
-export function AppointmentEditDialog({ appointmentId, onClose }: AppointmentEditDialogProps) {
+export function AppointmentEditDialog({ appointmentId, onClose, initialEditScope }: AppointmentEditDialogProps) {
   const { toast } = useToast();
-  const [editScope, setEditScope] = useState<"this_only" | "this_and_future">("this_only");
+  const [editScope, setEditScope] = useState<"this_only" | "this_and_future">(
+    initialEditScope ?? "this_only",
+  );
   const [deleteScope, setDeleteScope] = useState<"this_only" | "this_and_future">("this_only");
   const [newFrequency, setNewFrequency] = useState<"semanal" | "quincenal">("semanal");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -106,6 +109,10 @@ export function AppointmentEditDialog({ appointmentId, onClose }: AppointmentEdi
       setNewFrequency(appointment.frequency === "quincenal" ? "quincenal" : "semanal");
     }
   }, [appointment, form]);
+
+  useEffect(() => {
+    setEditScope(initialEditScope ?? "this_only");
+  }, [initialEditScope, appointmentId]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {

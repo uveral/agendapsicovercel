@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   addMonths,
@@ -27,9 +27,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettingsValue } from '@/hooks/useAppSettings';
 import { useDiagnosticCalendarData } from '@/hooks/useDiagnosticCalendarData';
 import AppointmentQuickCreateDialog from '@/components/AppointmentQuickCreateDialog';
+import { AppointmentEditDialog } from '@/components/AppointmentEditDialog';
+import SeriesActionDialog, { type SeriesActionScope } from '@/components/SeriesActionDialog';
 import type { Therapist, TherapistWorkingHours } from '@/lib/types';
 import type { NormalizedAppointment } from '@/shared/diagnosticCalendarData';
 import { getUniqueTherapists } from '@/shared/diagnosticCalendarData';
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 
 const DAY_LABELS_MAP: Record<number, string> = {
   0: 'Dom',
@@ -154,6 +158,14 @@ function timeToMinutes(time: string): number {
   return hour * 60 + (Number.isFinite(minute) ? minute : 0);
 }
 
+function minutesToTime(minutes: number): string {
+  const normalized = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
 function useHourBlocks(
   workingHours: TherapistWorkingHours[],
   appointments: NormalizedAppointment[],
@@ -254,49 +266,6 @@ function getTherapistSlots(
   return occupied ? 'busy' : 'free';
 }
 
-function AppointmentDayCell({
-  day,
-  appointments,
-  isCurrentMonth,
-}: {
-  day: Date;
-  appointments: NormalizedAppointment[];
-  isCurrentMonth: boolean;
-}) {
-  const displayAppointments = appointments.slice(0, 6);
-  const extraCount = appointments.length - displayAppointments.length;
-
-  return (
-    <div
-      className={cn(
-        'min-h-[120px] rounded-md border p-2 transition-colors',
-        isCurrentMonth ? 'bg-background' : 'bg-muted/50 text-muted-foreground',
-        isToday(day) && 'border-primary',
-      )}
-    >
-      <div className="flex items-center justify-between text-xs font-medium">
-        <span>{format(day, 'd')}</span>
-        {!isCurrentMonth && <span className="text-[10px]">{format(day, 'MMM', { locale: esLocale })}</span>}
-      </div>
-      <div className="mt-2 space-y-1">
-        {displayAppointments.map((appointment) => (
-          <div
-            key={appointment.id}
-            className="rounded-sm bg-muted px-1 py-0.5 text-[11px] leading-tight"
-          >
-            <span className="font-medium">{appointment.startTime.slice(0, 5)}</span>
-            <span className="mx-1 text-muted-foreground">·</span>
-            <span className="truncate">{appointment.clientName}</span>
-          </div>
-        ))}
-        {extraCount > 0 && (
-          <div className="text-[10px] text-muted-foreground">+{extraCount} más</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function GlobalDayCell({
   day,
   therapists,
@@ -394,22 +363,219 @@ function GlobalDayCell({
   );
 }
 
+interface TherapistDayCellProps {
+  day: Date;
+  therapistId: string;
+  appointmentsByDate: AppointmentsByDate;
+  allAppointments: AppointmentsByTherapist;
+  hourBlocks: number[];
+  workingHours: WorkingHoursMap;
+  isCurrentMonth: boolean;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
+  centerOpenMinutes: number;
+  centerCloseMinutes: number;
+  onFreeSlotClick?: (date: Date, hour: number, therapistId: string) => void;
+  onBusySlotClick?: (appointment: NormalizedAppointment, therapistId: string, date: Date) => void;
+  onAppointmentDragStart?: (appointment: NormalizedAppointment) => void;
+  onAppointmentDragEnd?: () => void;
+  onDropOnSlot?: (date: Date, hour: number, therapistId: string) => void;
+  draggedAppointmentId?: string | null;
+}
+
+function TherapistDayCell({
+  day,
+  therapistId,
+  appointmentsByDate,
+  allAppointments,
+  hourBlocks,
+  workingHours,
+  isCurrentMonth,
+  openOnSaturday,
+  openOnSunday,
+  centerOpenMinutes,
+  centerCloseMinutes,
+  onFreeSlotClick,
+  onBusySlotClick,
+  onAppointmentDragStart,
+  onAppointmentDragEnd,
+  onDropOnSlot,
+  draggedAppointmentId,
+}: TherapistDayCellProps) {
+  const isoDate = format(day, 'yyyy-MM-dd');
+  const dayAppointments = appointmentsByDate.get(isoDate) ?? [];
+  const slots = hourBlocks.map((hour) => {
+    const status = getTherapistSlots(
+      therapistId,
+      day,
+      hour,
+      workingHours,
+      allAppointments,
+      openOnSaturday,
+      openOnSunday,
+      centerOpenMinutes,
+      centerCloseMinutes,
+    );
+    const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
+    const slotAppointment = dayAppointments.find((appointment) => {
+      const startMinutes = timeToMinutes(appointment.startTime);
+      const endMinutes = timeToMinutes(appointment.endTime);
+      const hourMinutes = hour * 60;
+      return (
+        Number.isFinite(startMinutes) &&
+        Number.isFinite(endMinutes) &&
+        hourMinutes >= startMinutes &&
+        hourMinutes < endMinutes
+      );
+    });
+
+    if (status === 'busy' && slotAppointment) {
+      const isDragging = draggedAppointmentId === slotAppointment.id;
+
+      return (
+        <button
+          key={`${isoDate}-${hour}`}
+          type="button"
+          className={cn(
+            'w-full rounded-sm border border-amber-500/40 bg-amber-100 px-2 py-1 text-left text-[11px] leading-tight transition-colors',
+            'hover:bg-amber-200/80',
+            isDragging && 'opacity-70 ring-2 ring-amber-500',
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (draggedAppointmentId) return;
+            onBusySlotClick?.(slotAppointment, therapistId, day);
+          }}
+          draggable
+          onDragStart={(event) => {
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', slotAppointment.id);
+            onAppointmentDragStart?.(slotAppointment);
+          }}
+          onDragEnd={() => {
+            onAppointmentDragEnd?.();
+          }}
+        >
+          <div className="flex items-center justify-between text-[10px] font-medium uppercase text-muted-foreground">
+            <span>{hourLabel}</span>
+            <span>{slotAppointment.statusLabel}</span>
+          </div>
+          <div className="mt-1 font-medium">
+            {slotAppointment.startTime.slice(0, 5)} - {slotAppointment.endTime.slice(0, 5)}
+          </div>
+          <div className="truncate text-[11px]">{slotAppointment.clientName}</div>
+        </button>
+      );
+    }
+
+    if (status === 'free') {
+      const isDropActive = Boolean(draggedAppointmentId);
+
+      return (
+        <button
+          key={`${isoDate}-${hour}`}
+          type="button"
+          className={cn(
+            'w-full rounded-sm border border-dashed border-emerald-500/50 bg-emerald-50/40 px-2 py-1 text-left text-[11px] leading-tight text-emerald-900 transition-colors',
+            'hover:bg-emerald-100/70',
+            isDropActive && 'border-solid',
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
+            onFreeSlotClick?.(day, hour, therapistId);
+          }}
+          onDragOver={(event) => {
+            if (!isDropActive) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={(event) => {
+            if (!isDropActive) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onDropOnSlot?.(day, hour, therapistId);
+          }}
+        >
+          <div className="text-[10px] font-medium uppercase text-emerald-700">{hourLabel}</div>
+          <div className="text-[11px] font-medium">Hueco disponible</div>
+          <div className="text-[10px] text-emerald-700/80">Haz clic para agendar</div>
+        </button>
+      );
+    }
+
+    return null;
+  });
+
+  const hasContent = slots.some((slot) => slot !== null);
+
+  return (
+    <div
+      className={cn(
+        'min-h-[140px] rounded-md border p-2 transition-colors',
+        isCurrentMonth ? 'bg-background' : 'bg-muted/50 text-muted-foreground',
+        isToday(day) && 'border-primary',
+      )}
+    >
+      <div className="flex items-center justify-between text-xs font-medium">
+        <span>{format(day, 'd')}</span>
+        {!isCurrentMonth && <span className="text-[10px]">{format(day, 'MMM', { locale: esLocale })}</span>}
+      </div>
+      <div className="mt-2 space-y-1">
+        {hasContent ? (
+          slots
+        ) : (
+          <div className="rounded-sm border border-dashed px-2 py-3 text-center text-[11px] text-muted-foreground">
+            Sin horario disponible
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const ALL_THERAPISTS_VALUE = '__all__';
 
 interface TherapistMonthCalendarProps {
   therapist: TherapistOption;
-  appointments: AppointmentsByDate;
+  appointmentsByDate: AppointmentsByDate;
+  allAppointments: AppointmentsByTherapist;
   currentMonth: Date;
   monthGrid: Date[][];
   dayLabels: string[];
+  hourBlocks: number[];
+  workingHours: WorkingHoursMap;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
+  centerOpenMinutes: number;
+  centerCloseMinutes: number;
+  onFreeSlotClick?: (date: Date, hour: number, therapistId: string) => void;
+  onBusySlotClick?: (appointment: NormalizedAppointment, therapistId: string, date: Date) => void;
+  onAppointmentDragStart?: (appointment: NormalizedAppointment) => void;
+  onAppointmentDragEnd?: () => void;
+  onDropOnSlot?: (date: Date, hour: number, therapistId: string) => void;
+  draggedAppointmentId?: string | null;
 }
 
 function TherapistMonthCalendar({
   therapist,
-  appointments,
+  appointmentsByDate,
+  allAppointments,
   currentMonth,
   monthGrid,
   dayLabels,
+  hourBlocks,
+  workingHours,
+  openOnSaturday,
+  openOnSunday,
+  centerOpenMinutes,
+  centerCloseMinutes,
+  onFreeSlotClick,
+  onBusySlotClick,
+  onAppointmentDragStart,
+  onAppointmentDragEnd,
+  onDropOnSlot,
+  draggedAppointmentId,
 }: TherapistMonthCalendarProps) {
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: esLocale });
   const columnClass = gridColumnClass(dayLabels.length);
@@ -436,19 +602,28 @@ function TherapistMonthCalendar({
                 key={weekIndex}
                 className={cn('grid gap-2', columnClass)}
               >
-                {week.map((day) => {
-                  const isoDate = format(day, 'yyyy-MM-dd');
-                  const dayAppointments = appointments.get(isoDate) ?? [];
-
-                  return (
-                    <AppointmentDayCell
-                      key={isoDate}
-                      day={day}
-                      appointments={dayAppointments}
-                      isCurrentMonth={isSameMonth(day, currentMonth)}
-                    />
-                  );
-                })}
+                {week.map((day) => (
+                  <TherapistDayCell
+                    key={format(day, 'yyyy-MM-dd')}
+                    day={day}
+                    therapistId={therapist.id}
+                    appointmentsByDate={appointmentsByDate}
+                    allAppointments={allAppointments}
+                    hourBlocks={hourBlocks}
+                    workingHours={workingHours}
+                    isCurrentMonth={isSameMonth(day, currentMonth)}
+                    openOnSaturday={openOnSaturday}
+                    openOnSunday={openOnSunday}
+                    centerOpenMinutes={centerOpenMinutes}
+                    centerCloseMinutes={centerCloseMinutes}
+                    onFreeSlotClick={onFreeSlotClick}
+                    onBusySlotClick={onBusySlotClick}
+                    onAppointmentDragStart={onAppointmentDragStart}
+                    onAppointmentDragEnd={onAppointmentDragEnd}
+                    onDropOnSlot={onDropOnSlot}
+                    draggedAppointmentId={draggedAppointmentId}
+                  />
+                ))}
               </div>
             ))}
           </div>
@@ -462,6 +637,7 @@ export default function CalendarPage() {
   const { user, loading: authLoading } = useAuth();
   const settings = useAppSettingsValue();
   const { appointments, isLoading: appointmentsLoading } = useDiagnosticCalendarData();
+  const { toast } = useToast();
   const { data: therapists = [], isLoading: therapistsLoading } = useQuery<Therapist[]>({
     queryKey: ['/api/therapists'],
   });
@@ -484,6 +660,17 @@ export default function CalendarPage() {
     hour: number;
     clickedTherapistId: string;
   } | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [selectedAppointmentScope, setSelectedAppointmentScope] = useState<SeriesActionScope>('this_only');
+  const [draggedAppointment, setDraggedAppointment] = useState<NormalizedAppointment | null>(null);
+  const [seriesDialogOpen, setSeriesDialogOpen] = useState(false);
+  const [seriesDialogFrequency, setSeriesDialogFrequency] = useState<'semanal' | 'quincenal'>('semanal');
+  const [pendingSeriesContext, setPendingSeriesContext] = useState<
+    | { type: 'open_edit'; appointment: NormalizedAppointment }
+    | { type: 'move'; appointment: NormalizedAppointment; target: { date: Date; hour: number; therapistId: string } }
+    | null
+  >(null);
+  const [isProcessingMove, setIsProcessingMove] = useState(false);
   const adminViewInitializedRef = useRef(isAdmin);
 
   useEffect(() => {
@@ -588,6 +775,129 @@ export default function CalendarPage() {
   const centerOpenMinutes = timeToMinutes(settings.centerOpensAt);
   const centerCloseMinutes = timeToMinutes(settings.centerClosesAt);
 
+  const performAppointmentMove = useCallback(
+    async (
+      appointment: NormalizedAppointment,
+      scope: SeriesActionScope,
+      target: { date: Date; hour: number; therapistId: string },
+    ) => {
+      const resolvedScope = scope === 'all' ? 'this_and_future' : scope;
+      const isoDate = format(target.date, 'yyyy-MM-dd');
+      const [, minutePartRaw] = appointment.startTime.split(':');
+      const minutePart = Number.parseInt(minutePartRaw ?? '0', 10);
+      const startMinutes = target.hour * 60 + (Number.isFinite(minutePart) ? minutePart : 0);
+      const originalStartMinutes = timeToMinutes(appointment.startTime);
+      const originalEndMinutes = timeToMinutes(appointment.endTime);
+      const durationSource = appointment.durationMinutes;
+      const durationMinutes =
+        typeof durationSource === 'number' && Number.isFinite(durationSource)
+          ? durationSource
+          : Number.isFinite(originalStartMinutes) && Number.isFinite(originalEndMinutes)
+            ? originalEndMinutes - originalStartMinutes
+            : 60;
+      const endMinutes = startMinutes + (Number.isFinite(durationMinutes) ? durationMinutes : 60);
+      const newStartTime = minutesToTime(startMinutes);
+      const newEndTime = minutesToTime(endMinutes);
+
+      setIsProcessingMove(true);
+      try {
+        const payload = {
+          date: isoDate,
+          startTime: newStartTime,
+          endTime: newEndTime,
+          therapistId: target.therapistId,
+        };
+
+        const isRecurring = appointment.frequency && appointment.frequency !== 'puntual';
+
+        if (isRecurring) {
+          await apiRequest(
+            'PATCH',
+            `/api/appointments/${appointment.id}/series?scope=${resolvedScope}`,
+            payload,
+          );
+        } else {
+          await apiRequest('PATCH', `/api/appointments/${appointment.id}`, payload);
+        }
+
+        await queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+        toast({
+          title: 'Cita reprogramada',
+          description: `${appointment.clientName} pasa al ${format(target.date, "EEEE d 'de' MMMM", {
+            locale: esLocale,
+          })} a las ${newStartTime}`,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo reprogramar la cita';
+        toast({
+          title: 'Error al mover la cita',
+          description: message,
+          variant: 'destructive',
+        });
+      } finally {
+        setIsProcessingMove(false);
+      }
+    },
+    [toast],
+  );
+
+  const handleAppointmentDragStart = useCallback((appointment: NormalizedAppointment) => {
+    setDraggedAppointment(appointment);
+  }, []);
+
+  const handleAppointmentDragEnd = useCallback(() => {
+    setDraggedAppointment(null);
+  }, []);
+
+  const handleBusySlotClick = useCallback(
+    (appointment: NormalizedAppointment) => {
+      if (appointment.frequency === 'semanal' || appointment.frequency === 'quincenal') {
+        setPendingSeriesContext({ type: 'open_edit', appointment });
+        setSeriesDialogFrequency(appointment.frequency === 'quincenal' ? 'quincenal' : 'semanal');
+        setSeriesDialogOpen(true);
+        return;
+      }
+
+      setSelectedAppointmentScope('this_only');
+      setSelectedAppointmentId(appointment.id);
+    },
+    [],
+  );
+
+  const handleSlotDrop = useCallback(
+    (date: Date, hour: number, therapistId: string) => {
+      if (!draggedAppointment || isProcessingMove) {
+        return;
+      }
+
+      const isoDate = format(date, 'yyyy-MM-dd');
+      const originalHour = Number.parseInt(draggedAppointment.startTime.slice(0, 2), 10);
+
+      if (
+        draggedAppointment.therapistId === therapistId &&
+        draggedAppointment.date === isoDate &&
+        Number.isFinite(originalHour) &&
+        originalHour === hour
+      ) {
+        setDraggedAppointment(null);
+        return;
+      }
+
+      const target = { date, hour, therapistId };
+
+      if (draggedAppointment.frequency === 'semanal' || draggedAppointment.frequency === 'quincenal') {
+        setPendingSeriesContext({ type: 'move', appointment: draggedAppointment, target });
+        setSeriesDialogFrequency(draggedAppointment.frequency === 'quincenal' ? 'quincenal' : 'semanal');
+        setSeriesDialogOpen(true);
+      } else {
+        void performAppointmentMove(draggedAppointment, 'this_only', target);
+      }
+
+      setDraggedAppointment(null);
+    },
+    [draggedAppointment, isProcessingMove, performAppointmentMove],
+  );
+
   const handleSlotClick = (date: Date, hour: number, clickedTherapistId: string, status: SlotStatus) => {
     if (status !== 'free') return;
 
@@ -597,8 +907,6 @@ export default function CalendarPage() {
 
   const availableTherapistsForSlot = useMemo(() => {
     if (!selectedSlot) return [];
-
-    const dayOfWeek = getDay(selectedSlot.date);
 
     return baseTherapists.map(therapist => {
       const status = getTherapistSlots(
@@ -738,10 +1046,25 @@ export default function CalendarPage() {
                       <TherapistMonthCalendar
                         key={therapist.id}
                         therapist={therapist}
-                        appointments={therapistAppointments}
+                        appointmentsByDate={therapistAppointments}
+                        allAppointments={appointmentsByTherapist}
                         currentMonth={currentMonth}
                         monthGrid={monthGrid}
                         dayLabels={dayLabels}
+                        hourBlocks={hourBlocks}
+                        workingHours={workingHoursMap}
+                        openOnSaturday={settings.openOnSaturday}
+                        openOnSunday={settings.openOnSunday}
+                        centerOpenMinutes={centerOpenMinutes}
+                        centerCloseMinutes={centerCloseMinutes}
+                        onFreeSlotClick={(date, hour, therapistId) =>
+                          handleSlotClick(date, hour, therapistId, 'free')
+                        }
+                        onBusySlotClick={(appointment) => handleBusySlotClick(appointment)}
+                        onAppointmentDragStart={handleAppointmentDragStart}
+                        onAppointmentDragEnd={handleAppointmentDragEnd}
+                        onDropOnSlot={handleSlotDrop}
+                        draggedAppointmentId={draggedAppointment?.id ?? null}
                       />
                     );
                   })}
@@ -755,10 +1078,25 @@ export default function CalendarPage() {
                   <TabsContent key={therapist.id} value={therapist.id} className="mt-6">
                     <TherapistMonthCalendar
                       therapist={therapist}
-                      appointments={therapistAppointments}
+                      appointmentsByDate={therapistAppointments}
+                      allAppointments={appointmentsByTherapist}
                       currentMonth={currentMonth}
                       monthGrid={monthGrid}
                       dayLabels={dayLabels}
+                      hourBlocks={hourBlocks}
+                      workingHours={workingHoursMap}
+                      openOnSaturday={settings.openOnSaturday}
+                      openOnSunday={settings.openOnSunday}
+                      centerOpenMinutes={centerOpenMinutes}
+                      centerCloseMinutes={centerCloseMinutes}
+                      onFreeSlotClick={(date, hour, therapistId) =>
+                        handleSlotClick(date, hour, therapistId, 'free')
+                      }
+                      onBusySlotClick={(appointment) => handleBusySlotClick(appointment)}
+                      onAppointmentDragStart={handleAppointmentDragStart}
+                      onAppointmentDragEnd={handleAppointmentDragEnd}
+                      onDropOnSlot={handleSlotDrop}
+                      draggedAppointmentId={draggedAppointment?.id ?? null}
                     />
                   </TabsContent>
                 );
@@ -833,6 +1171,47 @@ export default function CalendarPage() {
           workingHours={workingHours}
         />
       )}
+
+      <AppointmentEditDialog
+        appointmentId={selectedAppointmentId}
+        onClose={() => {
+          setSelectedAppointmentId(null);
+          setSelectedAppointmentScope('this_only');
+        }}
+        initialEditScope={selectedAppointmentScope === 'all' ? 'this_and_future' : selectedAppointmentScope}
+      />
+
+      <SeriesActionDialog
+        open={seriesDialogOpen}
+        onClose={() => {
+          setSeriesDialogOpen(false);
+          setPendingSeriesContext(null);
+        }}
+        onConfirm={(scope) => {
+          if (!pendingSeriesContext) {
+            setSeriesDialogOpen(false);
+            return;
+          }
+
+          const resolvedScope = scope === 'all' ? 'this_and_future' : scope;
+
+          if (pendingSeriesContext.type === 'open_edit') {
+            setSelectedAppointmentScope(resolvedScope);
+            setSelectedAppointmentId(pendingSeriesContext.appointment.id);
+          } else if (pendingSeriesContext.type === 'move') {
+            void performAppointmentMove(
+              pendingSeriesContext.appointment,
+              resolvedScope,
+              pendingSeriesContext.target,
+            );
+          }
+
+          setSeriesDialogOpen(false);
+          setPendingSeriesContext(null);
+        }}
+        action="edit"
+        frequency={seriesDialogFrequency}
+      />
     </div>
   );
 }
