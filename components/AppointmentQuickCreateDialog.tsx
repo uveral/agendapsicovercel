@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
+import { addMinutesToTime } from '@/lib/time-utils';
 import type { User, Therapist, TherapistWorkingHours } from '@/lib/types';
 
 interface AppointmentQuickCreateDialogProps {
@@ -47,7 +48,7 @@ export default function AppointmentQuickCreateDialog({
   const [selectedTherapistId, setSelectedTherapistId] = useState<string>('');
   const [frequency, setFrequency] = useState<Frequency>('puntual');
   const [startTime, setStartTime] = useState(`${hour.toString().padStart(2, '0')}:00`);
-  const [endTime, setEndTime] = useState(`${(hour + 1).toString().padStart(2, '0')}:00`);
+  const computedEndTime = useMemo(() => addMinutesToTime(startTime, 60), [startTime]);
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery<User[]>({
     queryKey: ['/api/clients'],
@@ -175,7 +176,6 @@ export default function AppointmentQuickCreateDialog({
     setSelectedTherapistId('');
     setFrequency('puntual');
     setStartTime(`${hour.toString().padStart(2, '0')}:00`);
-    setEndTime(`${(hour + 1).toString().padStart(2, '0')}:00`);
     onClose();
   };
 
@@ -194,7 +194,7 @@ export default function AppointmentQuickCreateDialog({
       therapistId: selectedTherapistId,
       dates: seriesDates,
       startTime,
-      endTime,
+      endTime: computedEndTime,
       frequency,
     });
   };
@@ -374,25 +374,17 @@ export default function AppointmentQuickCreateDialog({
                 </RadioGroup>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="start-time">Hora inicio</Label>
-                  <Input
-                    id="start-time"
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end-time">Hora fin</Label>
-                  <Input
-                    id="end-time"
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="start-time">Hora inicio</Label>
+                <Input
+                  id="start-time"
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Se reservará durante 1 hora (fin a las {computedEndTime}).
+                </p>
               </div>
 
               {availabilityWarnings.length > 0 && (

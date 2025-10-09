@@ -166,6 +166,34 @@ function minutesToTime(minutes: number): string {
   return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 }
 
+function formatCompactHourLabel(time: string): string {
+  const [hoursPart = '0', minutesPart = '0'] = time.split(':');
+  const hours = Number.parseInt(hoursPart, 10);
+  const minutes = Number.parseInt(minutesPart, 10);
+
+  if (!Number.isFinite(hours)) {
+    return time.slice(0, 5);
+  }
+
+  if (!Number.isFinite(minutes) || minutes === 0) {
+    return `${hours}`;
+  }
+
+  return `${hours}:${minutes.toString().padStart(2, '0')}`;
+}
+
+function getBusySlotClassNames(status: NormalizedAppointment['status']): string {
+  switch (status) {
+    case 'pending':
+      return 'border-orange-300 bg-orange-200 hover:bg-orange-300/80 text-neutral-900';
+    case 'cancelled':
+      return 'border-neutral-300 bg-neutral-100 hover:bg-neutral-200 text-neutral-500 line-through';
+    case 'confirmed':
+    default:
+      return 'border-amber-300 bg-amber-200 hover:bg-amber-300/80 text-neutral-900';
+  }
+}
+
 function useHourBlocks(
   workingHours: TherapistWorkingHours[],
   appointments: NormalizedAppointment[],
@@ -416,7 +444,6 @@ function TherapistDayCell({
       centerOpenMinutes,
       centerCloseMinutes,
     );
-    const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
     const slotAppointment = dayAppointments.find((appointment) => {
       const startMinutes = timeToMinutes(appointment.startTime);
       const endMinutes = timeToMinutes(appointment.endTime);
@@ -431,16 +458,24 @@ function TherapistDayCell({
 
     if (status === 'busy' && slotAppointment) {
       const isDragging = draggedAppointmentId === slotAppointment.id;
+      const displayTime = formatCompactHourLabel(slotAppointment.startTime);
+      const ringClass =
+        slotAppointment.status === 'pending'
+          ? 'ring-orange-500'
+          : slotAppointment.status === 'cancelled'
+            ? 'ring-neutral-400'
+            : 'ring-amber-500';
 
       return (
         <button
           key={`${isoDate}-${hour}`}
           type="button"
           className={cn(
-            'w-full rounded-sm border border-amber-500/40 bg-amber-100 px-2 py-1 text-left text-[11px] leading-tight transition-colors',
-            'hover:bg-amber-200/80',
-            isDragging && 'opacity-70 ring-2 ring-amber-500',
+            'w-full rounded-sm border px-2 py-1 text-left text-[11px] font-semibold leading-tight text-neutral-900 transition-colors',
+            getBusySlotClassNames(slotAppointment.status),
+            isDragging && `opacity-70 ring-2 ${ringClass}`,
           )}
+          title={`${displayTime} - ${slotAppointment.clientName}`}
           onClick={(event) => {
             event.stopPropagation();
             if (draggedAppointmentId) return;
@@ -457,30 +492,27 @@ function TherapistDayCell({
             onAppointmentDragEnd?.();
           }}
         >
-          <div className="flex items-center justify-between text-[10px] font-medium uppercase text-muted-foreground">
-            <span>{hourLabel}</span>
-            <span>{slotAppointment.statusLabel}</span>
+          <div className="truncate">
+            {displayTime} - {slotAppointment.clientName}
           </div>
-          <div className="mt-1 font-medium">
-            {slotAppointment.startTime.slice(0, 5)} - {slotAppointment.endTime.slice(0, 5)}
-          </div>
-          <div className="truncate text-[11px]">{slotAppointment.clientName}</div>
         </button>
       );
     }
 
     if (status === 'free') {
       const isDropActive = Boolean(draggedAppointmentId);
+      const displayTime = formatCompactHourLabel(`${hour.toString().padStart(2, '0')}:00`);
 
       return (
         <button
           key={`${isoDate}-${hour}`}
           type="button"
           className={cn(
-            'w-full rounded-sm border border-dashed border-emerald-500/50 bg-emerald-50/40 px-2 py-1 text-left text-[11px] leading-tight text-emerald-900 transition-colors',
-            'hover:bg-emerald-100/70',
+            'w-full rounded-sm border border-dashed border-emerald-400 bg-emerald-100/70 px-2 py-1 text-left text-[11px] font-semibold leading-tight text-neutral-900 transition-colors',
+            'hover:bg-emerald-200/80',
             isDropActive && 'border-solid',
           )}
+          title={`${displayTime} - Hueco disponible`}
           onClick={(event) => {
             event.stopPropagation();
             onFreeSlotClick?.(day, hour, therapistId);
@@ -497,9 +529,7 @@ function TherapistDayCell({
             onDropOnSlot?.(day, hour, therapistId);
           }}
         >
-          <div className="text-[10px] font-medium uppercase text-emerald-700">{hourLabel}</div>
-          <div className="text-[11px] font-medium">Hueco disponible</div>
-          <div className="text-[10px] text-emerald-700/80">Haz clic para agendar</div>
+          <div className="truncate">{displayTime} - Hueco disponible</div>
         </button>
       );
     }

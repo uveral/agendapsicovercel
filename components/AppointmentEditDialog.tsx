@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -48,6 +48,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Calendar, Clock, User as UserIcon, Trash2 } from "lucide-react";
+import { addMinutesToTime } from "@/lib/time-utils";
 
 interface AppointmentEditDialogProps {
   appointmentId: string | null;
@@ -57,7 +58,6 @@ interface AppointmentEditDialogProps {
 
 const formSchema = z.object({
   startTime: z.string().min(1, "Hora de inicio es requerida"),
-  endTime: z.string().min(1, "Hora de fin es requerida"),
   status: z.enum(["pending", "confirmed", "cancelled"]),
   notes: z.string().optional(),
 });
@@ -92,18 +92,20 @@ export function AppointmentEditDialog({ appointmentId, onClose, initialEditScope
     resolver: zodResolver(formSchema),
     defaultValues: {
       startTime: "",
-      endTime: "",
-      status: "pending",
+      status: "confirmed",
       notes: "",
     },
   });
 
   useEffect(() => {
     if (appointment) {
+      const normalizedStatus =
+        appointment.status === "pending" || appointment.status === "cancelled"
+          ? appointment.status
+          : "confirmed";
       form.reset({
         startTime: appointment.startTime,
-        endTime: appointment.endTime,
-        status: appointment.status,
+        status: normalizedStatus,
         notes: appointment.notes || "",
       });
       setNewFrequency(appointment.frequency === "quincenal" ? "quincenal" : "semanal");
@@ -114,17 +116,26 @@ export function AppointmentEditDialog({ appointmentId, onClose, initialEditScope
     setEditScope(initialEditScope ?? "this_only");
   }, [initialEditScope, appointmentId]);
 
+  const startTimeValue = form.watch("startTime");
+  const computedEndTime = useMemo(() => addMinutesToTime(startTimeValue || "00:00", 60), [startTimeValue]);
+
   const updateMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
       if (!appointmentId) return;
-      
+
       if (appointment?.frequency === "puntual") {
-        return await apiRequest("PATCH", `/api/appointments/${appointmentId}`, data);
+        return await apiRequest("PATCH", `/api/appointments/${appointmentId}`, {
+          ...data,
+          endTime: computedEndTime,
+        });
       } else {
         return await apiRequest(
           "PATCH",
           `/api/appointments/${appointmentId}/series?scope=${editScope}`,
-          data
+          {
+            ...data,
+            endTime: computedEndTime,
+          }
         );
       }
     },
@@ -303,35 +314,22 @@ export function AppointmentEditDialog({ appointmentId, onClose, initialEditScope
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="startTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Hora de inicio</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="time" data-testid="input-start-time" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="endTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Hora de fin</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="time" data-testid="input-end-time" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="startTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Hora de inicio</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="time" data-testid="input-start-time" />
+                      </FormControl>
+                      <FormMessage />
+                      <p className="text-xs text-muted-foreground">
+                        La cita finalizará a las {computedEndTime} (duración 1 hora).
+                      </p>
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
