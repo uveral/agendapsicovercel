@@ -48,16 +48,34 @@ function getFallbackRole(user: SupabaseUser | null) {
   return ADMIN_EMAILS.has(email) ? 'admin' : metadataRole ?? 'therapist';
 }
 
-function normalizeTime(value: string): string {
-  const match = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+function normalizeTime(
+  value: string,
+  { strict = false, fallback = '00:00' }: { strict?: boolean; fallback?: string } = {},
+): string {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (!match) {
-    throw new Error('Formato de hora inválido. Usa HH:MM');
+    if (strict) {
+      throw new Error('Formato de hora inválido. Usa HH:MM');
+    }
+    return fallback;
   }
 
-  const hours = Math.min(23, Math.max(0, Number.parseInt(match[1], 10)));
-  const minutes = Math.min(59, Math.max(0, Number.parseInt(match[2], 10)));
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
 
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    if (strict) {
+      throw new Error('Formato de hora inválido. Usa HH:MM');
+    }
+    return fallback;
+  }
+
+  const clampedHours = Math.min(23, Math.max(0, hours));
+  const clampedMinutes = Math.min(59, Math.max(0, minutes));
+
+  return `${clampedHours.toString().padStart(2, '0')}:${clampedMinutes
+    .toString()
+    .padStart(2, '0')}`;
 }
 
 async function getAuthContext(): Promise<AuthContext> {
@@ -178,8 +196,8 @@ export async function PUT(
     const parsed = availabilityPayloadSchema.parse(payload);
     entries = parsed.map((entry) => ({
       dayOfWeek: entry.dayOfWeek,
-      startTime: normalizeTime(entry.startTime),
-      endTime: normalizeTime(entry.endTime),
+      startTime: normalizeTime(entry.startTime, { strict: true }),
+      endTime: normalizeTime(entry.endTime, { strict: true }),
     }));
   } catch (error) {
     if (error instanceof z.ZodError) {
