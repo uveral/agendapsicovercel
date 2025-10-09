@@ -1,6 +1,24 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
+
+const ADMIN_EMAILS = Array.from(
+  new Set(
+    DEFAULT_ADMIN_EMAILS.concat(
+      (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ),
+);
+
+type PublicUserProfile = Record<string, unknown> & {
+  role?: string | null;
+  therapist_id?: string | null;
+};
+
 function toCamelCase<T = unknown>(obj: T): T {
   if (Array.isArray(obj)) {
     return obj.map(toCamelCase) as T;
@@ -24,6 +42,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
+  const email = authUser.email?.toLowerCase() ?? '';
+  const metaRole =
+    (authUser.user_metadata?.role as string | undefined) ||
+    (authUser.app_metadata?.role as string | undefined);
+  const therapistIdMeta =
+    (authUser.user_metadata?.therapist_id as string | undefined) ||
+    (authUser.app_metadata?.therapist_id as string | undefined) ||
+    null;
+  const fallbackRole = ADMIN_EMAILS.includes(email) ? 'admin' : metaRole ?? 'therapist';
+
   // Get the user profile from the users table
   const { data: userProfile, error: profileError } = await supabase
     .from('users')
@@ -31,15 +59,49 @@ export async function GET() {
     .eq('id', authUser.id)
     .single();
 
-  if (profileError) {
-    // If no profile exists, return just the auth user info
-    return NextResponse.json(toCamelCase({
-      id: authUser.id,
-      email: authUser.email,
-      role: null,
-    }));
+  if (profileError || !userProfile) {
+    const { data: createdProfile, error: upsertError } = await supabase
+      .from('users')
+      .upsert(
+        {
+          id: authUser.id,
+          email: authUser.email,
+          first_name: authUser.user_metadata?.first_name ?? null,
+          last_name: authUser.user_metadata?.last_name ?? null,
+          role: fallbackRole,
+          therapist_id: therapistIdMeta,
+        },
+        { onConflict: 'id' },
+      )
+      .select('*')
+      .single();
+
+    if (!upsertError && createdProfile) {
+      return NextResponse.json(toCamelCase(createdProfile as PublicUserProfile));
+    }
+
+    return NextResponse.json(
+      toCamelCase({
+        id: authUser.id,
+        email: authUser.email,
+        role: fallbackRole,
+        therapistId: therapistIdMeta,
+      }),
+    );
+  }
+
+  const mergedProfile: PublicUserProfile = {
+    ...(userProfile as PublicUserProfile),
+  };
+
+  if (!mergedProfile.role) {
+    mergedProfile.role = fallbackRole;
+  }
+
+  if (!mergedProfile.therapist_id && therapistIdMeta) {
+    mergedProfile.therapist_id = therapistIdMeta;
   }
 
   // Merge auth user with profile
-  return NextResponse.json(toCamelCase(userProfile));
+  return NextResponse.json(toCamelCase(mergedProfile));
 }

@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,18 +17,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DEFAULT_END_TIME,
+  DEFAULT_START_TIME,
+  UiScheduleSlot,
+  uiSlotsToPersistable,
+  workingHoursToUiSlots,
+} from "@/lib/therapistSchedule";
 
 interface TherapistScheduleDialogProps {
   therapistId: string;
   therapistName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-interface ScheduleSlot {
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
+  canEdit?: boolean;
 }
 
 const dayNames = [
@@ -47,91 +48,133 @@ export function TherapistScheduleDialog({
   therapistName,
   open,
   onOpenChange,
+  canEdit = true,
 }: TherapistScheduleDialogProps) {
   const { toast } = useToast();
-  const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
+  const [scheduleSlots, setScheduleSlots] = useState<UiScheduleSlot[]>([]);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
 
   // Load existing schedule
-  const { data: existingSchedule = [], isLoading } = useQuery<TherapistWorkingHours[]>({
+  const {
+    data: existingSchedule = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<TherapistWorkingHours[]>({
     queryKey: ["/api/therapists", therapistId, "schedule"],
     enabled: open,
   });
 
+  const normalizedSchedule = useMemo(
+    () => workingHoursToUiSlots(existingSchedule),
+    [existingSchedule],
+  );
+
+  const normalizedScheduleKey = useMemo(
+    () => JSON.stringify(normalizedSchedule),
+    [normalizedSchedule],
+  );
+
   // Initialize schedule slots when dialog opens or when schedule data loads from server
-  // The length check prevents overwriting user edits
   useEffect(() => {
-    if (open) {
-      if (existingSchedule.length > 0) {
-        // Convert from DB format (0=Sunday) to UI format (0=Monday)
-        const slots = existingSchedule.map((slot) => ({
-          dayOfWeek: (slot.dayOfWeek + 6) % 7,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-        }));
-        setScheduleSlots(slots);
-      } else {
-        setScheduleSlots([]);
-      }
+    if (!open) {
+      setHydratedKey(null);
+      return;
     }
-  }, [open, existingSchedule]);
+
+    if (hydratedKey === normalizedScheduleKey) {
+      return;
+    }
+
+    setScheduleSlots(normalizedSchedule);
+    setHydratedKey(normalizedScheduleKey);
+  }, [open, normalizedSchedule, normalizedScheduleKey, hydratedKey]);
+
+  const handleRetry = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   // Save schedule mutation
   const saveMutation = useMutation({
-    mutationFn: async (slots: ScheduleSlot[]) => {
-      // Convert from UI format (0=Monday) to DB format (0=Sunday)
-      const dbSlots = slots.map(slot => ({
-        ...slot,
-        dayOfWeek: (slot.dayOfWeek + 1) % 7
-      }));
-      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, dbSlots);
+    mutationFn: async (slots: UiScheduleSlot[]) => {
+      const payload = {
+        therapistId,
+        slots: uiSlotsToPersistable(slots),
+      };
+      return await apiRequest(
+        "PUT",
+        `/api/therapists/${therapistId}/schedule`,
+        payload,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/therapists", therapistId, "schedule"] });
       queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/therapist-working-hours"] });
       toast({
         title: "Horario guardado",
         description: "El horario del terapeuta ha sido actualizado exitosamente",
       });
       onOpenChange(false);
     },
-    onError: (error: Error) => {
+    onError: (mutationError: Error) => {
       toast({
         title: "Error",
-        description: error.message || "No se pudo guardar el horario",
+        description: mutationError.message || "No se pudo guardar el horario",
         variant: "destructive",
       });
     },
   });
 
   const addSlot = (dayOfWeek: number) => {
-    setScheduleSlots([
-      ...scheduleSlots,
-      { dayOfWeek, startTime: "09:00", endTime: "10:00" },
+    if (!canEdit) return;
+    setScheduleSlots((previous) => [
+      ...previous,
+      { dayOfWeek, startTime: DEFAULT_START_TIME, endTime: DEFAULT_END_TIME },
     ]);
   };
 
   const removeSlot = (dayOfWeek: number, index: number) => {
-    const daySlots = scheduleSlots.filter((s) => s.dayOfWeek === dayOfWeek);
-    const slotToRemove = daySlots[index];
-    setScheduleSlots(scheduleSlots.filter((s) => s !== slotToRemove));
+    if (!canEdit) return;
+    setScheduleSlots((previous) => {
+      const daySlots = previous.filter((slot) => slot.dayOfWeek === dayOfWeek);
+      const slotToRemove = daySlots[index];
+      if (!slotToRemove) {
+        return previous;
+      }
+
+      return previous.filter((slot) => slot !== slotToRemove);
+    });
   };
 
   const updateSlot = (
     dayOfWeek: number,
     index: number,
     field: "startTime" | "endTime",
-    value: string
+    value: string,
   ) => {
-    const daySlots = scheduleSlots.filter((s) => s.dayOfWeek === dayOfWeek);
-    const slotToUpdate = daySlots[index];
-    const slotIndex = scheduleSlots.indexOf(slotToUpdate);
+    if (!canEdit) return;
+    setScheduleSlots((previous) => {
+      const daySlots = previous.filter((slot) => slot.dayOfWeek === dayOfWeek);
+      const slotToUpdate = daySlots[index];
+      if (!slotToUpdate) {
+        return previous;
+      }
 
-    const newSlots = [...scheduleSlots];
-    newSlots[slotIndex] = { ...newSlots[slotIndex], [field]: value };
-    setScheduleSlots(newSlots);
+      const slotIndex = previous.indexOf(slotToUpdate);
+      if (slotIndex === -1) {
+        return previous;
+      }
+
+      const next = [...previous];
+      next[slotIndex] = { ...next[slotIndex], [field]: value };
+      return next;
+    });
   };
 
   const handleSave = () => {
+    if (!canEdit) return;
     saveMutation.mutate(scheduleSlots);
   };
 
@@ -149,12 +192,23 @@ export function TherapistScheduleDialog({
           <div className="py-8 text-center text-muted-foreground">
             Cargando horarios...
           </div>
+        ) : isError ? (
+          <div className="py-8 text-center text-destructive space-y-2">
+            <div>
+              {error instanceof Error
+                ? error.message
+                : "No se pudieron cargar los horarios"}
+            </div>
+            <Button type="button" variant="ghost" onClick={handleRetry}>
+              Reintentar
+            </Button>
+          </div>
         ) : (
           <ScrollArea className="max-h-[500px] pr-4">
             <div className="space-y-6">
               {dayNames.map((dayName, dayOfWeek) => {
                 const daySlots = scheduleSlots.filter(
-                  (s) => s.dayOfWeek === dayOfWeek
+                  (slot) => slot.dayOfWeek === dayOfWeek,
                 );
 
                 return (
@@ -167,6 +221,7 @@ export function TherapistScheduleDialog({
                         variant="outline"
                         onClick={() => addSlot(dayOfWeek)}
                         data-testid={`button-add-slot-${dayOfWeek}`}
+                        disabled={!canEdit}
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Añadir bloque
@@ -181,7 +236,7 @@ export function TherapistScheduleDialog({
                       <div className="space-y-2">
                         {daySlots.map((slot, index) => (
                           <div
-                            key={index}
+                            key={`${slot.dayOfWeek}-${index}-${slot.startTime}-${slot.endTime}`}
                             className="flex items-center gap-3 p-3 rounded-md border bg-card"
                           >
                             <div className="flex-1 grid grid-cols-2 gap-3">
@@ -197,10 +252,12 @@ export function TherapistScheduleDialog({
                                       dayOfWeek,
                                       index,
                                       "startTime",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   data-testid={`input-start-time-${dayOfWeek}-${index}`}
+                                  disabled={!canEdit}
+                                  readOnly={!canEdit}
                                 />
                               </div>
                               <div>
@@ -215,10 +272,12 @@ export function TherapistScheduleDialog({
                                       dayOfWeek,
                                       index,
                                       "endTime",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   data-testid={`input-end-time-${dayOfWeek}-${index}`}
+                                  disabled={!canEdit}
+                                  readOnly={!canEdit}
                                 />
                               </div>
                             </div>
@@ -228,6 +287,7 @@ export function TherapistScheduleDialog({
                               variant="ghost"
                               onClick={() => removeSlot(dayOfWeek, index)}
                               data-testid={`button-remove-slot-${dayOfWeek}-${index}`}
+                              disabled={!canEdit}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -254,7 +314,7 @@ export function TherapistScheduleDialog({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !canEdit}
             data-testid="button-save-schedule"
           >
             {saveMutation.isPending ? "Guardando..." : "Guardar horario"}

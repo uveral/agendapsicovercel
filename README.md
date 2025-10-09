@@ -56,6 +56,9 @@ NEXT_PUBLIC_SUPABASE_URL=tu-proyecto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Correos separados por comas que deben obtener rol de administrador automáticamente
+# (opcional, por defecto incluye uveral@gmail.com)
+ADMIN_EMAILS=admin@ejemplo.com,otro-admin@ejemplo.com
 ```
 
 ### 4. Configurar base de datos

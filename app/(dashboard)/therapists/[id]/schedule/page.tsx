@@ -1,63 +1,54 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertTriangle, ArrowLeft, RefreshCw } from 'lucide-react';
 import type { Therapist, TherapistWorkingHours } from '@/lib/types';
+import { workingHoursToUiSlots } from '@/lib/therapistSchedule';
 
-const DAYS = [
-  { value: 0, label: 'Domingo' },
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-  { value: 6, label: 'Sábado' },
+const DAY_NAMES = [
+  'Lunes',
+  'Martes',
+  'Miércoles',
+  'Jueves',
+  'Viernes',
+  'Sábado',
+  'Domingo',
 ];
 
 export default function TherapistSchedulePage() {
   const params = useParams();
   const router = useRouter();
-  const { toast } = useToast();
   const id = params.id as string;
 
   const { data: therapist } = useQuery<Therapist>({
     queryKey: [`/api/therapists/${id}`],
   });
 
-  const { data: schedule = [], isLoading } = useQuery<TherapistWorkingHours[]>({
+  const {
+    data: schedule = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<TherapistWorkingHours[]>({
     queryKey: [`/api/therapists/${id}/schedule`],
   });
 
-  const [slots, setSlots] = useState<TherapistWorkingHours[]>([]);
+  const normalizedSchedule = useMemo(
+    () => workingHoursToUiSlots(schedule),
+    [schedule],
+  );
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: TherapistWorkingHours[]) =>
-      apiRequest('PUT', `/api/therapists/${id}/schedule`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/therapists/${id}/schedule`] });
-      toast({
-        title: 'Horarios guardados',
-        description: 'Los horarios se han actualizado correctamente',
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const handleSave = () => {
-    saveMutation.mutate(slots);
-  };
+  const groupedByDay = useMemo(() => {
+    return DAY_NAMES.map((label, index) => ({
+      label,
+      slots: normalizedSchedule.filter((slot) => slot.dayOfWeek === index),
+    }));
+  }, [normalizedSchedule]);
 
   if (isLoading) {
     return (
@@ -82,33 +73,57 @@ export default function TherapistSchedulePage() {
       <Card>
         <CardHeader>
           <CardTitle>Horarios de trabajo</CardTitle>
+          <CardDescription>
+            Consulta los bloques configurados para cada día laborable. Utiliza la vista principal de terapeutas para editar los horarios.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-sm text-muted-foreground">
-            Esta funcionalidad está en desarrollo. Por ahora, los horarios se gestionan directamente en la base de datos.
-          </div>
-
-          <div className="space-y-2">
-            {schedule.map((slot) => {
-              const day = DAYS.find(d => d.value === slot.dayOfWeek);
-              return (
-                <div key={slot.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <div className="font-medium">{day?.label}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {slot.startTime} - {slot.endTime}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {schedule.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No hay horarios configurados
+          {isError ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-destructive/50 p-6 text-center">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+              <div className="text-sm text-destructive">
+                {error instanceof Error ? error.message : 'No se pudieron cargar los horarios.'}
               </div>
-            )}
-          </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reintentar
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {groupedByDay.map(({ label, slots }) => (
+                <div key={label} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {slots.length === 0
+                        ? 'Sin horarios configurados'
+                        : `${slots.length} bloque${slots.length > 1 ? 's' : ''}`}
+                    </span>
+                  </div>
+                  {slots.length > 0 && (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {slots.map((slot, index) => (
+                        <div
+                          key={`${label}-${index}-${slot.startTime}-${slot.endTime}`}
+                          className="rounded-md border bg-muted/30 p-3 text-sm"
+                        >
+                          <div className="font-medium">{slot.startTime} - {slot.endTime}</div>
+                          <div className="text-xs text-muted-foreground">Bloque #{index + 1}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {normalizedSchedule.length === 0 && !isError && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No hay horarios configurados para este terapeuta.
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

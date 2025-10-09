@@ -1,16 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Calendar, Mail, Phone } from 'lucide-react';
+import { ArrowLeft, Calendar, Mail, Phone, UserCog } from 'lucide-react';
 import type { User, Appointment } from '@/lib/types';
+import ClientAvailabilityMatrix from '@/components/ClientAvailabilityMatrix';
 
 export default function ClientDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   const { data: client, isLoading: clientLoading } = useQuery<User>({
     queryKey: [`/api/clients/${id}`],
@@ -111,7 +114,7 @@ export default function ClientDetailsPage() {
         <CardHeader>
           <CardTitle>Acciones</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-2 md:flex-row">
           <Button
             className="w-full md:w-auto"
             onClick={() => router.push(`/appointments?client=${id}`)}
@@ -119,8 +122,22 @@ export default function ClientDetailsPage() {
             <Calendar className="h-4 w-4 mr-2" />
             Ver todas las citas
           </Button>
+          <Button
+            variant="outline"
+            className="w-full md:w-auto"
+            onClick={() => setAvailabilityOpen(true)}
+          >
+            <UserCog className="h-4 w-4 mr-2" />
+            Editar disponibilidad
+          </Button>
         </CardContent>
       </Card>
+
+      <ClientAvailabilityMatrix
+        open={availabilityOpen}
+        clientId={id}
+        onClose={() => setAvailabilityOpen(false)}
+      />
     </div>
   );
 }

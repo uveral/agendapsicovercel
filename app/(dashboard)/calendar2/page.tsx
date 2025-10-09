@@ -28,8 +28,6 @@ function CalendarContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth(); // Now using centralized context
 
-  console.log('[Calendar2] CalendarContent mounted/rendered');
-
   // Use lazy initialization to prevent creating new Date on every render
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
 
@@ -80,7 +78,6 @@ function CalendarContent() {
 
   // Update selected therapist when query param changes
   useEffect(() => {
-    console.log('[Calendar2] useEffect - therapistParam changed:', therapistParam);
     if (therapistParam) {
       setSelectedTherapist(therapistParam);
       setViewType("individual");
@@ -88,7 +85,6 @@ function CalendarContent() {
   }, [therapistParam]);
 
   const therapistsList = useMemo(() => {
-    console.log('[Calendar2] Recalculating therapistsList');
     return [
       { id: "all", name: "Todos los terapeutas" },
       ...therapists.map((t) => ({ id: t.id, name: t.name })),
@@ -96,9 +92,7 @@ function CalendarContent() {
   }, [therapists]);
 
   const handleTherapistChange = useCallback((value: string) => {
-    console.log('[Calendar2] handleTherapistChange:', value);
     if (value === selectedTherapist) {
-      console.log('[Calendar2] Same therapist selected, skipping navigation');
       return; // Avoid navigation if no change
     }
 
@@ -113,17 +107,12 @@ function CalendarContent() {
   }, [router, selectedTherapist]);
 
   const handleDayClick = useCallback((therapistId: string, date: string) => {
-    console.log('[Calendar2] handleDayClick:', therapistId, date);
     setCreateDialogContext({ therapistId, date });
     setCreateDialogOpen(true);
   }, []);
 
-  // DEBUG: Log render
-  console.log('[Calendar2] Rendering. therapists:', therapists.length, 'appointments:', appointments.length, 'selectedDate:', selectedDate);
-
   // CRITICAL FIX: Don't render heavy components until we have all data
   if (isLoadingTherapists || therapists.length === 0) {
-    console.log('[Calendar2] Loading therapists... (blocking heavy component render)');
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Cargando calendario...</div>
@@ -179,7 +168,6 @@ function CalendarContent() {
                     mode="single"
                     selected={selectedDate}
                     onSelect={(date) => {
-                      console.log('[Calendar2] Date selected:', date);
                       setSelectedDate(date);
                     }}
                     className="rounded-md border"
