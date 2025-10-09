@@ -66,6 +66,12 @@ export function TherapistScheduleDialog({
     enabled: open,
   });
 
+  useEffect(() => {
+    if (open) {
+      void refetch();
+    }
+  }, [open, refetch]);
+
   const normalizedSchedule = useMemo(
     () => workingHoursToUiSlots(existingSchedule),
     [existingSchedule],
@@ -108,7 +114,15 @@ export function TherapistScheduleDialog({
         payload,
       );
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const persistedSchedule = Array.isArray(data)
+        ? (data as TherapistWorkingHours[])
+        : [];
+
+      queryClient.setQueryData(
+        ["/api/therapists", therapistId, "schedule"],
+        persistedSchedule,
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/therapists", therapistId, "schedule"] });
       queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
       queryClient.invalidateQueries({ queryKey: ["/api/therapist-working-hours"] });
