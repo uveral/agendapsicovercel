@@ -20,10 +20,16 @@ export default function TherapistDetailsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [formValues, setFormValues] = useState<{ name: string; email: string; phone: string }>({
+  const [formValues, setFormValues] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    specialty: string;
+  }>({
     name: '',
     email: '',
     phone: '',
+    specialty: '',
   });
 
   const { data: therapist, isLoading } = useQuery<Therapist>({
@@ -36,12 +42,13 @@ export default function TherapistDetailsPage() {
         name: therapist.name ?? '',
         email: therapist.email ?? '',
         phone: therapist.phone ?? '',
+        specialty: therapist.specialty ?? '',
       });
     }
   }, [therapist]);
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: { name: string; email: string; phone: string }) => {
+    mutationFn: async (payload: { name: string; email: string; phone: string; specialty: string }) => {
       return (await apiRequest('PATCH', `/api/therapists/${id}`, payload)) as Therapist;
     },
     onSuccess: async (updated) => {
@@ -49,6 +56,7 @@ export default function TherapistDetailsPage() {
         name: updated.name ?? '',
         email: updated.email ?? '',
         phone: updated.phone ?? '',
+        specialty: updated.specialty ?? '',
       });
       queryClient.setQueryData([`/api/therapists/${id}`], updated);
       await queryClient.invalidateQueries({ queryKey: ['/api/therapists'], refetchType: 'active' });
@@ -107,7 +115,9 @@ export default function TherapistDetailsPage() {
             <h1 className="text-2xl font-semibold">
               {isAdmin ? formValues.name || 'Nombre sin especificar' : therapist.name}
             </h1>
-            <p className="text-muted-foreground">{therapist.specialty || 'Sin especialidad'}</p>
+            <p className="text-muted-foreground">
+              {isAdmin ? formValues.specialty || 'Sin especialidad' : therapist.specialty || 'Sin especialidad'}
+            </p>
           </div>
           {isAdmin && (
             <div className="max-w-md space-y-2">
@@ -125,6 +135,20 @@ export default function TherapistDetailsPage() {
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="specialty">Especialidad</Label>
+          <Input
+            id="specialty"
+            value={formValues.specialty}
+            onChange={(event) =>
+              setFormValues((previous) => ({ ...previous, specialty: event.target.value }))
+            }
+            placeholder="Especialidad principal"
+          />
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {isAdmin ? (
