@@ -205,18 +205,16 @@ export async function PUT(
   }
 
   const sanitizedInput = sanitizeWorkingHoursCollection(
-    slots.map((slot: Record<string, unknown>) => ({
-      therapist_id: id,
-      day_of_week:
-        (slot as Record<string, unknown>).dayOfWeek ??
-        (slot as Record<string, unknown>).day_of_week,
-      start_time:
-        (slot as Record<string, unknown>).startTime ??
-        (slot as Record<string, unknown>).start_time,
-      end_time:
-        (slot as Record<string, unknown>).endTime ??
-        (slot as Record<string, unknown>).end_time,
-    })),
+    slots.map((slot) => {
+      const record = (slot ?? {}) as Record<string, unknown>;
+
+      return {
+        therapist_id: id,
+        day_of_week: record.dayOfWeek ?? record.day_of_week ?? null,
+        start_time: record.startTime ?? record.start_time ?? null,
+        end_time: record.endTime ?? record.end_time ?? null,
+      };
+    }),
   );
 
   if (sanitizedInput.length === 0 && slots.length > 0) {
