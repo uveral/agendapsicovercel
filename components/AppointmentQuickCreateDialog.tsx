@@ -64,8 +64,10 @@ export default function AppointmentQuickCreateDialog({
       endTime: string;
       frequency: Frequency;
     }) => {
+      const seriesId = data.frequency === 'puntual' ? null : crypto.randomUUID();
+
       // Create all appointments in the series
-      const appointments = data.dates.map(dateStr => ({
+      const appointments = data.dates.map((dateStr) => ({
         clientId: data.clientId,
         therapistId: data.therapistId,
         date: dateStr,
@@ -73,6 +75,7 @@ export default function AppointmentQuickCreateDialog({
         endTime: data.endTime,
         frequency: data.frequency,
         status: 'confirmed',
+        ...(seriesId ? { seriesId } : {}),
       }));
 
       // Create all appointments

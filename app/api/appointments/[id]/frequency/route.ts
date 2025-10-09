@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { toCamelCase } from '../../utils';
+import { ensureSeriesId, toCamelCase } from '../../utils';
 import { createClient } from '@/lib/supabase/server';
 
 type Frequency = 'semanal' | 'quincenal';
@@ -25,14 +25,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: fetchError.message }, { status: 500 });
   }
 
-  if (!appointment || !appointment.series_id) {
+  const seriesId = appointment ? await ensureSeriesId(supabase, appointment) : null;
+
+  if (!appointment || !seriesId) {
     return NextResponse.json({ error: 'Appointment not found or not part of a series' }, { status: 404 });
   }
+
+  appointment.series_id = seriesId;
 
   const { data: futureAppointments, error: futureError } = await supabase
     .from('appointments')
     .select('*')
-    .eq('series_id', appointment.series_id)
+    .eq('series_id', seriesId)
     .gte('date', appointment.date)
     .order('date', { ascending: true });
 
