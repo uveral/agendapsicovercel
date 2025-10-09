@@ -56,7 +56,7 @@ export default function AppointmentQuickCreateDialog({
       return await apiRequest('POST', '/api/appointments', {
         ...data,
         frequency: 'puntual',
-        status: 'scheduled',
+        status: 'confirmed',
       });
     },
     onSuccess: () => {
