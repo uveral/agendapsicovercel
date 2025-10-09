@@ -104,10 +104,57 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
 
   const allowedDayValues = useMemo(() => new Set(dayOptions.map((day) => day.value)), [dayOptions]);
 
-  const { data: availability = [], isLoading } = useQuery<ClientAvailability[]>({
+  const {
+    data: availabilityData,
+    isLoading,
+    error,
+  } = useQuery<ClientAvailability[]>({
     queryKey: [`/api/availability/${clientId}`],
     enabled: open && !!clientId,
   });
+
+  const availability = useMemo(() => {
+    if (!Array.isArray(availabilityData)) {
+      return [];
+    }
+
+    return availabilityData
+      .map((entry) => {
+        const { dayOfWeek } = entry ?? {};
+        const parsedDay =
+          typeof dayOfWeek === "number"
+            ? dayOfWeek
+            : Number.parseInt(String(dayOfWeek ?? ""), 10);
+
+        if (!Number.isInteger(parsedDay)) {
+          return null;
+        }
+
+        const extractHour = (value: unknown) => {
+          if (typeof value !== "string") {
+            return null;
+          }
+
+          const match = value.trim().match(/^(\d{1,2})/);
+          if (!match) {
+            return null;
+          }
+
+          const hour = Number.parseInt(match[1], 10);
+          return Number.isFinite(hour) ? hour : null;
+        };
+
+        const startHour = extractHour(entry?.startTime);
+        const endHour = extractHour(entry?.endTime);
+
+        if (startHour === null || endHour === null) {
+          return null;
+        }
+
+        return { dayOfWeek: parsedDay, startHour, endHour };
+      })
+      .filter((value): value is { dayOfWeek: number; startHour: number; endHour: number } => value !== null);
+  }, [availabilityData]);
 
   useEffect(() => {
     setSelectedCells(previous => {
@@ -145,14 +192,14 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
     const cells = new Set<string>();
 
     availability.forEach(avail => {
-      const startHour = parseInt(avail.startTime.split(':')[0]);
-      const endHour = parseInt(avail.endTime.split(':')[0]);
-
       if (!allowedDayValues.has(avail.dayOfWeek)) {
         return;
       }
 
-      for (let hour = startHour; hour < endHour; hour++) {
+      const safeStart = Math.max(openingHour, avail.startHour);
+      const safeEnd = Math.min(closingHourExclusive, avail.endHour);
+
+      for (let hour = safeStart; hour < safeEnd; hour++) {
         if (hour >= openingHour && hour < closingHourExclusive) {
           cells.add(`${avail.dayOfWeek}-${hour}`);
         }
@@ -273,6 +320,10 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-destructive">
+            No se pudo cargar la disponibilidad del cliente.
           </div>
         ) : dayOptions.length === 0 || hours.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
