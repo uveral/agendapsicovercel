@@ -21,6 +21,18 @@ export async function apiRequest(
 
   await throwIfResNotOk(res);
 
+  const scheduleMetaHeader = res.headers.get("x-therapist-schedule-meta");
+
+  if (scheduleMetaHeader) {
+    try {
+      const decoded = decodeURIComponent(scheduleMetaHeader);
+      const parsed = JSON.parse(decoded);
+      console.debug("[Therapist schedule API]", parsed);
+    } catch (error) {
+      console.debug("[Therapist schedule API]", scheduleMetaHeader, error);
+    }
+  }
+
   // Return JSON if response has content
   const contentType = res.headers.get("content-type");
   if (contentType && contentType.includes("application/json")) {

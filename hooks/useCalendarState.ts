@@ -19,19 +19,15 @@ const initialState = {
 export const useCalendarState = create<CalendarState>((set) => ({
   ...initialState,
   setSelectedTherapist: (id) => {
-    console.log('[CalendarState] Setting therapist:', id);
     set({ selectedTherapist: id });
   },
   setViewType: (type) => {
-    console.log('[CalendarState] Setting view type:', type);
     set({ viewType: type });
   },
   setCalendarView: (view) => {
-    console.log('[CalendarState] Setting calendar view:', view);
     set({ calendarView: view });
   },
   reset: () => {
-    console.log('[CalendarState] Resetting to initial state');
     set(initialState);
   },
 }));
