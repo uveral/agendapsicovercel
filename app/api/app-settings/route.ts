@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
 
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
@@ -164,7 +164,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'No settings to update' }, { status: 400 });
   }
 
-  const adminClient = await createAdminClient();
+  const supabase = await createClient();
 
   const upsertPayload = entries.map(([key, value]) => {
     if (key === 'centerOpensAt' || key === 'centerClosesAt') {
@@ -180,7 +180,7 @@ export async function PUT(request: Request) {
     return { key: SETTINGS_KEYS[key], value };
   });
 
-  const { error: upsertError } = await adminClient
+  const { error: upsertError } = await supabase
     .from('settings')
     .upsert(upsertPayload, { onConflict: 'key' });
 
@@ -188,7 +188,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
-  const { data, error } = await adminClient
+  const { data, error } = await supabase
     .from('settings')
     .select('*')
     .in('key', Object.values(SETTINGS_KEYS));

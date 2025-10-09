@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
 
 interface AuthContext {
@@ -96,7 +96,7 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const supabase = isAdmin ? await createAdminClient() : await createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from('client_availability')
     .select('*')
@@ -162,9 +162,9 @@ export async function PUT(
     );
   }
 
-  const adminClient = await createAdminClient();
+  const supabase = await createClient();
 
-  const { error: deleteError } = await adminClient
+  const { error: deleteError } = await supabase
     .from('client_availability')
     .delete()
     .eq('user_id', clientId);
@@ -181,7 +181,7 @@ export async function PUT(
       end_time: entry.endTime,
     }));
 
-    const { error: insertError } = await adminClient
+    const { error: insertError } = await supabase
       .from('client_availability')
       .insert(insertPayload);
 
@@ -190,7 +190,7 @@ export async function PUT(
     }
   }
 
-  const { data, error: fetchError } = await adminClient
+  const { data, error: fetchError } = await supabase
     .from('client_availability')
     .select('*')
     .eq('user_id', clientId)

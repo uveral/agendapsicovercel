@@ -22,7 +22,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettingsValue } from '@/hooks/useAppSettings';
@@ -320,24 +319,6 @@ function GlobalDayCell({
   centerOpenMinutes: number;
   centerCloseMinutes: number;
 }) {
-  const slotSquares = hourBlocks.flatMap((hour) =>
-    therapists.map((therapist) => ({
-      therapist,
-      hour,
-      status: getTherapistSlots(
-        therapist.id,
-        day,
-        hour,
-        workingHours,
-        appointments,
-        openOnSaturday,
-        openOnSunday,
-        centerOpenMinutes,
-        centerCloseMinutes,
-      ),
-    })),
-  );
-
   const statusClass = (status: SlotStatus) => {
     switch (status) {
       case 'busy':
@@ -348,6 +329,9 @@ function GlobalDayCell({
         return 'bg-muted';
     }
   };
+
+  const dayKey = format(day, 'yyyyMMdd');
+  const dayLabel = format(day, 'd MMM', { locale: esLocale });
 
   return (
     <div
@@ -361,17 +345,41 @@ function GlobalDayCell({
         <span>{format(day, 'd')}</span>
         {!isCurrentMonth && <span className="text-[10px]">{format(day, 'MMM', { locale: esLocale })}</span>}
       </div>
-      <div
-        className="mt-2 grid gap-[2px]"
-        style={{ gridTemplateColumns: `repeat(${therapists.length}, minmax(0, 1fr))` }}
-      >
-        {slotSquares.map(({ therapist, hour, status }) => (
-          <span
-            key={`${therapist.id}-${format(day, 'yyyyMMdd')}-${hour}`}
-            className={cn('h-2 w-full rounded-sm md:h-3', statusClass(status))}
-            title={`${format(day, 'd MMM', { locale: esLocale })} · ${hour.toString().padStart(2, '0')}:00 · ${therapist.name}`}
-          />
-        ))}
+      <div className="mt-2 space-y-1">
+        {hourBlocks.map((hour) => {
+          const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
+
+          return (
+            <div
+              key={`${dayKey}-${hour}`}
+              className="grid items-center gap-[2px]"
+              style={{ gridTemplateColumns: `minmax(2.5rem, auto) repeat(${therapists.length}, minmax(0, 1fr))` }}
+            >
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{hourLabel}</span>
+              {therapists.map((therapist) => {
+                const status = getTherapistSlots(
+                  therapist.id,
+                  day,
+                  hour,
+                  workingHours,
+                  appointments,
+                  openOnSaturday,
+                  openOnSunday,
+                  centerOpenMinutes,
+                  centerCloseMinutes,
+                );
+
+                return (
+                  <span
+                    key={`${therapist.id}-${dayKey}-${hour}`}
+                    className={cn('h-2 w-full rounded-sm md:h-3', statusClass(status))}
+                    title={`${dayLabel} · ${hourLabel} · ${therapist.name}`}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -444,7 +452,7 @@ function TherapistMonthCalendar({
 export default function CalendarPage() {
   const { user, loading: authLoading } = useAuth();
   const settings = useAppSettingsValue();
-  const { appointments, isLoading: appointmentsLoading, source } = useDiagnosticCalendarData();
+  const { appointments, isLoading: appointmentsLoading } = useDiagnosticCalendarData();
   const { data: therapists = [], isLoading: therapistsLoading } = useQuery<Therapist[]>({
     queryKey: ['/api/therapists'],
   });
@@ -562,8 +570,6 @@ export default function CalendarPage() {
     [currentMonth, dayOrder],
   );
 
-  const showWeekends = settings.openOnSaturday || settings.openOnSunday;
-
   const centerOpenMinutes = timeToMinutes(settings.centerOpensAt);
   const centerCloseMinutes = timeToMinutes(settings.centerClosesAt);
 
@@ -579,23 +585,35 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold">Calendario</h1>
-          <p className="text-muted-foreground">
-            Gestiona las citas mensuales y revisa la ocupación por terapeuta.
-          </p>
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Datos: {source === 'supabase' ? 'Supabase' : 'Ejemplo interno'}</span>
-            <Separator orientation="vertical" className="h-3" />
-            <span>{showWeekends ? 'Incluye fines de semana' : 'Sólo lunes a viernes'}</span>
-          </div>
+          {isAdmin && visibleTherapists.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs sm:text-sm">
+              <span className="font-medium">Leyenda</span>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+                <span>Hora libre</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-amber-400" />
+                <span>Hora ocupada</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-muted" />
+                <span>Fuera de horario</span>
+              </div>
+              <Badge variant="outline" className="ml-0 sm:ml-2">
+                {visibleTherapists.length} terapeutas
+              </Badge>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 sm:justify-end">
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth((month) => addMonths(month, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[160px] text-center text-sm font-medium capitalize">
+          <span className="min-w-[140px] text-center text-sm font-medium capitalize">
             {format(currentMonth, 'MMMM yyyy', { locale: esLocale })}
           </span>
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth((month) => addMonths(month, 1))}>
@@ -693,28 +711,7 @@ export default function CalendarPage() {
                 </CardContent>
               </Card>
             ) : (
-              <>
-                <Card>
-                  <CardContent className="p-4 sm:p-6">
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <span className="font-medium">Leyenda</span>
-                      <div className="flex items-center gap-1">
-                        <span className="h-3 w-3 rounded-sm bg-emerald-500" />
-                        <span>Hora libre</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="h-3 w-3 rounded-sm bg-amber-400" />
-                        <span>Hora ocupada</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="h-3 w-3 rounded-sm bg-muted" />
-                        <span>Fuera de horario</span>
-                      </div>
-                      <Badge variant="outline" className="ml-auto">{visibleTherapists.length} terapeutas</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
+              <> 
                 <Card>
                   <CardContent className="p-4 sm:p-6">
                     <div className={cn('grid gap-2', gridColumnClass(dayLabels.length))}>
