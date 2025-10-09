@@ -39,8 +39,7 @@ export const getQueryFn: <T>(options: {
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
       headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
+        Accept: "application/json",
       },
     });
 
