@@ -240,7 +240,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: 'Appointment not found' }, { status: 404 });
   }
 
-  if (!appointment.series_id) {
+  const seriesId = (await ensureSeriesId(supabase, appointment)) ?? appointment.series_id;
+
+  if (!seriesId) {
     const { error } = await supabase.from('appointments').delete().eq('id', id);
 
     if (error) {
@@ -253,7 +255,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { error: deleteError } = await supabase
     .from('appointments')
     .delete()
-    .eq('series_id', appointment.series_id)
+    .eq('series_id', seriesId)
     .gte('date', appointment.date);
 
   if (deleteError) {
