@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -37,25 +37,23 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
   });
 
   useEffect(() => {
-    if (availability.length > 0) {
-      const cells = new Set<string>();
-      
-      availability.forEach(avail => {
-        const startHour = parseInt(avail.startTime.split(':')[0]);
-        const endHour = parseInt(avail.endTime.split(':')[0]);
-        
-        for (let hour = startHour; hour < endHour; hour++) {
-          if (hour >= 9 && hour < 21) {
-            cells.add(`${avail.dayOfWeek}-${hour}`);
-          }
+    if (!open) return;
+
+    const cells = new Set<string>();
+
+    availability.forEach(avail => {
+      const startHour = parseInt(avail.startTime.split(':')[0]);
+      const endHour = parseInt(avail.endTime.split(':')[0]);
+
+      for (let hour = startHour; hour < endHour; hour++) {
+        if (hour >= 9 && hour < 21) {
+          cells.add(`${avail.dayOfWeek}-${hour}`);
         }
-      });
-      
-      setSelectedCells(cells);
-    } else {
-      setSelectedCells(new Set());
-    }
-  }, [availability]);
+      }
+    });
+
+    setSelectedCells(cells);
+  }, [open, isLoading]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: { dayOfWeek: number; startTime: string; endTime: string }[]) => {
