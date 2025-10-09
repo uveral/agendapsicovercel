@@ -2,8 +2,20 @@ import { NextResponse } from 'next/server';
 
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
+
+const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
+
+const ADMIN_EMAILS = new Set(
+  DEFAULT_ADMIN_EMAILS.concat(
+    (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+);
 
 const SETTINGS_KEYS = {
   centerOpensAt: 'center_open_time',
@@ -98,6 +110,26 @@ function mapRowsToSettings(rows: SettingsRow[] | null): AppSettings {
   } satisfies AppSettings;
 }
 
+function getUserMetadataValue<T = unknown>(user: SupabaseUser, key: string): T | null {
+  const fromUser = user.user_metadata?.[key];
+  const fromApp = user.app_metadata?.[key];
+  return (fromUser as T | undefined) ?? (fromApp as T | undefined) ?? null;
+}
+
+function getFallbackAuthContext(user: SupabaseUser | null) {
+  if (!user) {
+    return { role: null as string | null, therapistId: null as string | null };
+  }
+
+  const email = user.email?.toLowerCase() ?? '';
+  const metadataRole = getUserMetadataValue<string | null>(user, 'role');
+  const therapistIdMeta = getUserMetadataValue<string | null>(user, 'therapist_id');
+
+  const fallbackRole = ADMIN_EMAILS.has(email) ? 'admin' : metadataRole ?? 'therapist';
+
+  return { role: fallbackRole, therapistId: therapistIdMeta };
+}
+
 async function getCurrentUserRole() {
   const supabase = await createClient();
   const {
@@ -109,17 +141,34 @@ async function getCurrentUserRole() {
     return { status: 401 as const, role: null, therapistId: null };
   }
 
+  const fallback = getFallbackAuthContext(user);
+
   const { data: profile, error: profileError } = await supabase
     .from('users')
     .select('role, therapist_id')
     .eq('id', user.id)
     .single();
 
-  if (profileError || !profile) {
+  if (profileError) {
+    if (fallback.role) {
+      return { status: 200 as const, role: fallback.role, therapistId: fallback.therapistId };
+    }
+
     return { status: 403 as const, role: null, therapistId: null };
   }
 
-  return { status: 200 as const, role: profile.role, therapistId: profile.therapist_id };
+  if (!profile) {
+    return { status: 200 as const, role: fallback.role, therapistId: fallback.therapistId };
+  }
+
+  const role = profile.role ?? fallback.role;
+  const therapistId = profile.therapist_id ?? fallback.therapistId;
+
+  if (!role) {
+    return { status: 403 as const, role: null, therapistId };
+  }
+
+  return { status: 200 as const, role, therapistId };
 }
 
 export async function GET() {

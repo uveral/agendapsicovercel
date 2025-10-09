@@ -3,12 +3,24 @@ import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface AuthContext {
   status: number;
   userId: string | null;
   role: string | null;
 }
+
+const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
+
+const ADMIN_EMAILS = new Set(
+  DEFAULT_ADMIN_EMAILS.concat(
+    (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+);
 
 const availabilityEntrySchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
@@ -19,6 +31,22 @@ const availabilityEntrySchema = z.object({
 const availabilityPayloadSchema = z
   .array(availabilityEntrySchema)
   .or(availabilityEntrySchema.transform((entry) => [entry]));
+
+function getUserMetadataValue<T = unknown>(user: SupabaseUser, key: string): T | null {
+  const fromUser = user.user_metadata?.[key];
+  const fromApp = user.app_metadata?.[key];
+  return (fromUser as T | undefined) ?? (fromApp as T | undefined) ?? null;
+}
+
+function getFallbackRole(user: SupabaseUser | null) {
+  if (!user) {
+    return null as string | null;
+  }
+
+  const email = user.email?.toLowerCase() ?? '';
+  const metadataRole = getUserMetadataValue<string | null>(user, 'role');
+  return ADMIN_EMAILS.has(email) ? 'admin' : metadataRole ?? 'therapist';
+}
 
 function normalizeTime(value: string): string {
   const match = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
@@ -43,13 +71,15 @@ async function getAuthContext(): Promise<AuthContext> {
     return { status: 401, userId: null, role: null };
   }
 
+  const fallbackRole = getFallbackRole(user);
+
   const { data: profile } = await supabase
     .from('users')
     .select('role')
     .eq('id', user.id)
     .maybeSingle();
 
-  const role = profile?.role ?? (user.user_metadata?.role as string | null) ?? null;
+  const role = profile?.role ?? fallbackRole;
 
   return { status: 200, userId: user.id, role };
 }

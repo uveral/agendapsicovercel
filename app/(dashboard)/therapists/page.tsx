@@ -123,8 +123,9 @@ export default function Therapists() {
     mutationFn: async (data: InsertTherapist) => {
       return await apiRequest("POST", "/api/therapists", data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/therapists"], refetchType: "active" });
+      router.refresh();
       setIsDialogOpen(false);
       form.reset();
       toast({
@@ -145,8 +146,9 @@ export default function Therapists() {
     mutationFn: async (id: string) => {
       return await apiRequest("DELETE", `/api/therapists/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/therapists"], refetchType: "active" });
+      router.refresh();
       setDeleteTherapist(null);
       toast({
         title: "Terapeuta eliminado",
