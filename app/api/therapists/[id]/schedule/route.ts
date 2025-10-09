@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { sanitizeWorkingHoursCollection } from '@/lib/therapistSchedule';
+import { randomUUID } from 'node:crypto';
 
 const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
 
@@ -12,6 +13,10 @@ const ADMIN_EMAILS = new Set(
       .filter(Boolean),
   ),
 );
+
+const SERVICE_ROLE_AVAILABLE =
+  typeof process.env.SUPABASE_SERVICE_ROLE_KEY === 'string' &&
+  process.env.SUPABASE_SERVICE_ROLE_KEY.trim().length > 0;
 
 function resolveRole(
   profileRole: string | null | undefined,
@@ -166,7 +171,19 @@ export async function PUT(
     })),
   );
 
-  const writeClient = isAdmin ? await createAdminClient() : supabase;
+  const canEscalateWithServiceRole = isAdmin && SERVICE_ROLE_AVAILABLE;
+
+  if (isAdmin && !isOwnSchedule && !canEscalateWithServiceRole) {
+    return NextResponse.json(
+      {
+        error:
+          'Falta configurar SUPABASE_SERVICE_ROLE_KEY para que los administradores gestionen horarios de otros terapeutas.',
+      },
+      { status: 503 },
+    );
+  }
+
+  const writeClient = canEscalateWithServiceRole ? await createAdminClient() : supabase;
 
   // Delete existing schedule
   const { error: deleteError } = await writeClient
@@ -180,6 +197,7 @@ export async function PUT(
 
   if (sanitizedInput.length > 0) {
     const dbSlots = sanitizedInput.map((slot) => ({
+      id: randomUUID(),
       therapist_id: slot.therapistId,
       day_of_week: slot.dayOfWeek,
       start_time: slot.startTime,
