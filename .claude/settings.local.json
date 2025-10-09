@@ -31,7 +31,9 @@
       "Bash(npm run dev:*)",
       "Bash(pkill:*)",
       "Bash(npm install zustand lodash)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

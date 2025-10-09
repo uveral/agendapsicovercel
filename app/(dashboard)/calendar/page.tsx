@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettingsValue } from '@/hooks/useAppSettings';
 import { useDiagnosticCalendarData } from '@/hooks/useDiagnosticCalendarData';
+import AppointmentQuickCreateDialog from '@/components/AppointmentQuickCreateDialog';
 import type { Therapist, TherapistWorkingHours } from '@/lib/types';
 import type { NormalizedAppointment } from '@/shared/diagnosticCalendarData';
 import { getUniqueTherapists } from '@/shared/diagnosticCalendarData';
@@ -307,6 +308,7 @@ function GlobalDayCell({
   openOnSunday,
   centerOpenMinutes,
   centerCloseMinutes,
+  onSlotClick,
 }: {
   day: Date;
   therapists: TherapistOption[];
@@ -318,6 +320,7 @@ function GlobalDayCell({
   openOnSunday: boolean;
   centerOpenMinutes: number;
   centerCloseMinutes: number;
+  onSlotClick?: (date: Date, hour: number, therapistId: string, status: SlotStatus) => void;
 }) {
   const statusClass = (status: SlotStatus) => {
     switch (status) {
@@ -370,10 +373,16 @@ function GlobalDayCell({
                 );
 
                 return (
-                  <span
+                  <button
                     key={`${therapist.id}-${dayKey}-${hour}`}
-                    className={cn('h-2 w-full rounded-sm md:h-3', statusClass(status))}
+                    className={cn(
+                      'h-2 w-full rounded-sm md:h-3 transition-all',
+                      statusClass(status),
+                      status === 'free' && 'cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1'
+                    )}
                     title={`${dayLabel} · ${hourLabel} · ${therapist.name}`}
+                    onClick={() => onSlotClick?.(day, hour, therapist.id, status)}
+                    disabled={status !== 'free'}
                   />
                 );
               })}
@@ -469,6 +478,12 @@ export default function CalendarPage() {
   const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() =>
     isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '',
   );
+  const [quickCreateDialogOpen, setQuickCreateDialogOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    date: Date;
+    hour: number;
+    clickedTherapistId: string;
+  } | null>(null);
   const adminViewInitializedRef = useRef(isAdmin);
 
   useEffect(() => {
@@ -572,6 +587,57 @@ export default function CalendarPage() {
 
   const centerOpenMinutes = timeToMinutes(settings.centerOpensAt);
   const centerCloseMinutes = timeToMinutes(settings.centerClosesAt);
+
+  const handleSlotClick = (date: Date, hour: number, clickedTherapistId: string, status: SlotStatus) => {
+    if (status !== 'free') return;
+
+    setSelectedSlot({ date, hour, clickedTherapistId });
+    setQuickCreateDialogOpen(true);
+  };
+
+  const availableTherapistsForSlot = useMemo(() => {
+    if (!selectedSlot) return [];
+
+    const dayOfWeek = getDay(selectedSlot.date);
+
+    return baseTherapists.map(therapist => {
+      const status = getTherapistSlots(
+        therapist.id,
+        selectedSlot.date,
+        selectedSlot.hour,
+        workingHoursMap,
+        appointmentsByTherapist,
+        settings.openOnSaturday,
+        settings.openOnSunday,
+        centerOpenMinutes,
+        centerCloseMinutes,
+      );
+
+      const therapistData = therapists.find(t => t.id === therapist.id);
+
+      return {
+        therapist: therapistData ?? {
+          id: therapist.id,
+          name: therapist.name,
+          specialty: '',
+          email: null,
+          phone: null,
+          color: undefined,
+          createdAt: new Date().toISOString(),
+        },
+        isInSchedule: status === 'free',
+      };
+    }).sort((a, b) => {
+      // Clicked therapist first
+      if (a.therapist.id === selectedSlot.clickedTherapistId) return -1;
+      if (b.therapist.id === selectedSlot.clickedTherapistId) return 1;
+      // Then in-schedule therapists
+      if (a.isInSchedule && !b.isInSchedule) return -1;
+      if (!a.isInSchedule && b.isInSchedule) return 1;
+      // Then by name
+      return a.therapist.name.localeCompare(b.therapist.name);
+    });
+  }, [selectedSlot, baseTherapists, therapists, workingHoursMap, appointmentsByTherapist, settings.openOnSaturday, settings.openOnSunday, centerOpenMinutes, centerCloseMinutes]);
 
   const isLoading = authLoading || appointmentsLoading || therapistsLoading;
 
@@ -740,6 +806,7 @@ export default function CalendarPage() {
                               openOnSunday={settings.openOnSunday}
                               centerOpenMinutes={centerOpenMinutes}
                               centerCloseMinutes={centerCloseMinutes}
+                              onSlotClick={handleSlotClick}
                             />
                           ))}
                         </div>
@@ -752,6 +819,19 @@ export default function CalendarPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {selectedSlot && (
+        <AppointmentQuickCreateDialog
+          open={quickCreateDialogOpen}
+          onClose={() => {
+            setQuickCreateDialogOpen(false);
+            setSelectedSlot(null);
+          }}
+          date={selectedSlot.date}
+          hour={selectedSlot.hour}
+          availableTherapists={availableTherapistsForSlot}
+        />
+      )}
     </div>
   );
 }
