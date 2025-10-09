@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   addMonths,
@@ -678,12 +679,23 @@ export default function CalendarPage() {
   const isAdmin = user?.role === 'admin';
   const therapistOwnId = user?.therapistId ?? null;
   const canViewOthers = isAdmin || settings.therapistCanViewOthers;
+  const searchParams = useSearchParams();
+  const viewFromQuery = searchParams.get('view');
+  const therapistFromQuery = searchParams.get('therapist');
 
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
-  const [viewMode, setViewMode] = useState<'personal' | 'global'>(isAdmin ? 'global' : 'personal');
-  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() =>
-    isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '',
-  );
+  const [viewMode, setViewMode] = useState<'personal' | 'global'>(() => {
+    if (viewFromQuery === 'personal' || viewFromQuery === 'global') {
+      return viewFromQuery;
+    }
+    return isAdmin ? 'global' : 'personal';
+  });
+  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() => {
+    if (therapistFromQuery !== null) {
+      return therapistFromQuery;
+    }
+    return isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '';
+  });
   const [quickCreateDialogOpen, setQuickCreateDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{
     date: Date;
@@ -709,6 +721,18 @@ export default function CalendarPage() {
       adminViewInitializedRef.current = true;
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (viewFromQuery === 'personal' || viewFromQuery === 'global') {
+      setViewMode(viewFromQuery);
+    }
+  }, [viewFromQuery]);
+
+  useEffect(() => {
+    if (therapistFromQuery !== null) {
+      setSelectedTherapistId(therapistFromQuery);
+    }
+  }, [therapistFromQuery]);
 
   const appointmentsByTherapist = useMemo(
     () => groupAppointmentsByTherapist(appointments),

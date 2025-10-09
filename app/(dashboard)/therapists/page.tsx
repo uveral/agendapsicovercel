@@ -281,7 +281,9 @@ export default function Therapists() {
             <TherapistCard
               key={therapist.id}
               {...therapist}
-              onViewCalendar={(id) => router.push(`/calendar?therapist=${id}`)}
+              onViewCalendar={(id) =>
+                router.push(`/calendar?view=personal&therapist=${encodeURIComponent(id)}`)
+              }
               onManageSchedule={canManageSchedule ? (id) => {
                 const therapistData = therapists.find(t => t.id === id);
                 if (therapistData) {
