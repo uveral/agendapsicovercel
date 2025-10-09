@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, addWeeks, addDays, getDay } from 'date-fns';
 import { es as esLocale } from 'date-fns/locale';
-import { Search, Loader2, Clock, AlertCircle } from 'lucide-react';
+import { Search, Loader2, Clock, AlertCircle, Calendar, Info } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,10 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
-import type { User, Therapist, TherapistWorkingHours, Appointment } from '@/lib/types';
+import type { User, Therapist, TherapistWorkingHours } from '@/lib/types';
 
 interface AppointmentQuickCreateDialogProps {
   open: boolean;
@@ -26,7 +28,10 @@ interface AppointmentQuickCreateDialogProps {
     therapist: Therapist;
     isInSchedule: boolean;
   }>;
+  workingHours: TherapistWorkingHours[];
 }
+
+type Frequency = 'puntual' | 'semanal' | 'quincenal';
 
 export default function AppointmentQuickCreateDialog({
   open,
@@ -34,11 +39,15 @@ export default function AppointmentQuickCreateDialog({
   date,
   hour,
   availableTherapists,
+  workingHours,
 }: AppointmentQuickCreateDialogProps) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [selectedTherapistId, setSelectedTherapistId] = useState<string>('');
+  const [frequency, setFrequency] = useState<Frequency>('puntual');
+  const [startTime, setStartTime] = useState(`${hour.toString().padStart(2, '0')}:00`);
+  const [endTime, setEndTime] = useState(`${(hour + 1).toString().padStart(2, '0')}:00`);
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery<User[]>({
     queryKey: ['/api/clients'],
@@ -49,27 +58,43 @@ export default function AppointmentQuickCreateDialog({
     mutationFn: async (data: {
       clientId: string;
       therapistId: string;
-      date: string;
+      dates: string[];
       startTime: string;
       endTime: string;
+      frequency: Frequency;
     }) => {
-      return await apiRequest('POST', '/api/appointments', {
-        ...data,
-        frequency: 'puntual',
+      // Create all appointments in the series
+      const appointments = data.dates.map(dateStr => ({
+        clientId: data.clientId,
+        therapistId: data.therapistId,
+        date: dateStr,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        frequency: data.frequency,
         status: 'confirmed',
-      });
+      }));
+
+      // Create all appointments
+      const results = await Promise.all(
+        appointments.map(apt => apiRequest('POST', '/api/appointments', apt))
+      );
+
+      return results;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      const count = variables.dates.length;
       toast({
-        title: 'Cita creada',
-        description: 'La cita ha sido agendada exitosamente',
+        title: 'Citas creadas',
+        description: count === 1
+          ? 'La cita ha sido agendada exitosamente'
+          : `Se han creado ${count} citas en la serie`,
       });
       handleClose();
     },
     onError: (error: Error) => {
       toast({
-        title: 'Error al crear la cita',
+        title: 'Error al crear las citas',
         description: error.message,
         variant: 'destructive',
       });
@@ -91,10 +116,66 @@ export default function AppointmentQuickCreateDialog({
     return clients.find(c => c.id === selectedClientId);
   }, [clients, selectedClientId]);
 
+  // Calculate series dates based on frequency
+  const seriesDates = useMemo(() => {
+    const dates = [format(date, 'yyyy-MM-dd')];
+
+    if (frequency === 'semanal') {
+      // 52 weeks = 1 year
+      for (let i = 1; i < 52; i++) {
+        const nextDate = addWeeks(date, i);
+        dates.push(format(nextDate, 'yyyy-MM-dd'));
+      }
+    } else if (frequency === 'quincenal') {
+      // 26 biweekly = 1 year
+      for (let i = 1; i < 26; i++) {
+        const nextDate = addWeeks(date, i * 2);
+        dates.push(format(nextDate, 'yyyy-MM-dd'));
+      }
+    }
+
+    return dates;
+  }, [date, frequency]);
+
+  // Check therapist availability for all dates in series
+  const availabilityWarnings = useMemo(() => {
+    if (!selectedTherapistId || frequency === 'puntual') return [];
+
+    const therapistHours = workingHours.filter(wh => wh.therapistId === selectedTherapistId);
+    const dayOfWeek = getDay(date);
+    const warnings: string[] = [];
+
+    // Check if therapist works on this day of the week
+    const worksOnDay = therapistHours.some(wh => wh.dayOfWeek === dayOfWeek);
+
+    if (!worksOnDay) {
+      warnings.push(`El terapeuta no trabaja los ${['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados'][dayOfWeek]}`);
+    } else {
+      // Check if the time is within working hours
+      const startMinutes = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
+
+      const withinHours = therapistHours.some(wh => {
+        if (wh.dayOfWeek !== dayOfWeek) return false;
+        const whStart = parseInt(wh.startTime.split(':')[0]) * 60 + parseInt(wh.startTime.split(':')[1]);
+        const whEnd = parseInt(wh.endTime.split(':')[0]) * 60 + parseInt(wh.endTime.split(':')[1]);
+        return startMinutes >= whStart && startMinutes < whEnd;
+      });
+
+      if (!withinHours) {
+        warnings.push('El horario está fuera del horario laboral del terapeuta');
+      }
+    }
+
+    return warnings;
+  }, [selectedTherapistId, frequency, workingHours, date, startTime]);
+
   const handleClose = () => {
     setSearchTerm('');
     setSelectedClientId('');
     setSelectedTherapistId('');
+    setFrequency('puntual');
+    setStartTime(`${hour.toString().padStart(2, '0')}:00`);
+    setEndTime(`${(hour + 1).toString().padStart(2, '0')}:00`);
     onClose();
   };
 
@@ -108,15 +189,13 @@ export default function AppointmentQuickCreateDialog({
       return;
     }
 
-    const startTime = `${hour.toString().padStart(2, '0')}:00`;
-    const endTime = `${(hour + 1).toString().padStart(2, '0')}:00`;
-
     createMutation.mutate({
       clientId: selectedClientId,
       therapistId: selectedTherapistId,
-      date: format(date, 'yyyy-MM-dd'),
+      dates: seriesDates,
       startTime,
       endTime,
+      frequency,
     });
   };
 
@@ -266,6 +345,84 @@ export default function AppointmentQuickCreateDialog({
                 </div>
               )}
             </div>
+          )}
+
+          {/* Frequency and Time Selection */}
+          {selectedClientId && selectedTherapistId && (
+            <>
+              <div className="space-y-2">
+                <Label>Frecuencia</Label>
+                <RadioGroup value={frequency} onValueChange={(v) => setFrequency(v as Frequency)}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="puntual" id="puntual" />
+                    <Label htmlFor="puntual" className="font-normal cursor-pointer">
+                      Cita puntual (una sola vez)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="semanal" id="semanal" />
+                    <Label htmlFor="semanal" className="font-normal cursor-pointer">
+                      Semanal (52 citas por 1 año)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="quincenal" id="quincenal" />
+                    <Label htmlFor="quincenal" className="font-normal cursor-pointer">
+                      Quincenal (26 citas por 1 año)
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="start-time">Hora inicio</Label>
+                  <Input
+                    id="start-time"
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-time">Hora fin</Label>
+                  <Input
+                    id="end-time"
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {availabilityWarnings.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="font-medium mb-1">Advertencia de disponibilidad:</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      {availabilityWarnings.map((warning, idx) => (
+                        <li key={idx} className="text-sm">{warning}</li>
+                      ))}
+                    </ul>
+                    {frequency !== 'puntual' && (
+                      <div className="mt-2 text-sm opacity-90">
+                        Esto aplicará a todas las {frequency === 'semanal' ? '52' : '26'} citas de la serie.
+                      </div>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {frequency !== 'puntual' && availabilityWarnings.length === 0 && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Se crearán {seriesDates.length} citas {frequency === 'semanal' ? 'semanales' : 'quincenales'} durante un año.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
           )}
         </div>
 

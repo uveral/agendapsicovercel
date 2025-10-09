@@ -830,6 +830,7 @@ export default function CalendarPage() {
           date={selectedSlot.date}
           hour={selectedSlot.hour}
           availableTherapists={availableTherapistsForSlot}
+          workingHours={workingHours}
         />
       )}
     </div>
