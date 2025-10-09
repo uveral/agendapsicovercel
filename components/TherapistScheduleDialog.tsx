@@ -98,7 +98,10 @@ export function TherapistScheduleDialog({
   // Save schedule mutation
   const saveMutation = useMutation({
     mutationFn: async (slots: UiScheduleSlot[]) => {
-      const payload = uiSlotsToPersistable(slots);
+      const payload = {
+        therapistId,
+        slots: uiSlotsToPersistable(slots),
+      };
       return await apiRequest(
         "PUT",
         `/api/therapists/${therapistId}/schedule`,

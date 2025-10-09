@@ -121,13 +121,59 @@ export async function GET(
   return NextResponse.json(camelCaseSchedule);
 }
 
+function extractSlots(payload: unknown): unknown[] | null {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (payload && typeof payload === 'object') {
+    const container = payload as Record<string, unknown>;
+    const candidateKeys = ['slots', 'data', 'workingHours', 'hours'];
+
+    for (const key of candidateKeys) {
+      const maybeSlots = container[key];
+      if (Array.isArray(maybeSlots)) {
+        return maybeSlots;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  const slots = await request.json();
+  let payload: unknown;
+
+  try {
+    payload = await request.json();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'No se pudo interpretar el cuerpo de la petición.';
+
+    return NextResponse.json(
+      { error: `JSON inválido: ${message}` },
+      { status: 400 },
+    );
+  }
+
+  const slots = extractSlots(payload);
+
+  if (!slots) {
+    return NextResponse.json(
+      {
+        error:
+          'Formato de datos inválido. Envía un arreglo con los bloques de horario a guardar.',
+      },
+      { status: 400 },
+    );
+  }
 
   const {
     data: { user },
@@ -158,18 +204,30 @@ export async function PUT(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  if (!Array.isArray(slots)) {
-    return NextResponse.json({ error: 'Formato de datos inválido' }, { status: 400 });
-  }
-
   const sanitizedInput = sanitizeWorkingHoursCollection(
     slots.map((slot: Record<string, unknown>) => ({
       therapist_id: id,
-      day_of_week: (slot as Record<string, unknown>).dayOfWeek,
-      start_time: (slot as Record<string, unknown>).startTime,
-      end_time: (slot as Record<string, unknown>).endTime,
+      day_of_week:
+        (slot as Record<string, unknown>).dayOfWeek ??
+        (slot as Record<string, unknown>).day_of_week,
+      start_time:
+        (slot as Record<string, unknown>).startTime ??
+        (slot as Record<string, unknown>).start_time,
+      end_time:
+        (slot as Record<string, unknown>).endTime ??
+        (slot as Record<string, unknown>).end_time,
     })),
   );
+
+  if (sanitizedInput.length === 0 && slots.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          'Ninguno de los bloques recibidos tiene un día y horas válidos. Revisa los valores introducidos.',
+      },
+      { status: 422 },
+    );
+  }
 
   const canEscalateWithServiceRole = isAdmin && SERVICE_ROLE_AVAILABLE;
 
