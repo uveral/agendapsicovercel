@@ -64,6 +64,10 @@ export function TherapistScheduleDialog({
   } = useQuery<TherapistWorkingHours[]>({
     queryKey: ["/api/therapists", therapistId, "schedule"],
     enabled: open,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
   });
 
   const normalizedSchedule = useMemo(

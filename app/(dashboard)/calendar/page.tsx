@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   addMonths,
@@ -31,8 +31,46 @@ import type { Therapist, TherapistWorkingHours } from '@/lib/types';
 import type { NormalizedAppointment } from '@/shared/diagnosticCalendarData';
 import { getUniqueTherapists } from '@/shared/diagnosticCalendarData';
 
-const DAY_LABELS_FULL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const DAY_LABELS_WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+const DAY_LABELS_MAP: Record<number, string> = {
+  0: 'Dom',
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
+};
+
+const WEEKDAY_ORDER_BASE: number[] = [1, 2, 3, 4, 5];
+
+function getVisibleDayOrder(openOnSaturday: boolean, openOnSunday: boolean): number[] {
+  const order = [...WEEKDAY_ORDER_BASE];
+
+  if (openOnSaturday) {
+    order.push(6);
+  }
+
+  if (openOnSunday) {
+    order.push(0);
+  }
+
+  return order;
+}
+
+function getDayLabels(dayOrder: number[]): string[] {
+  return dayOrder.map((weekday) => DAY_LABELS_MAP[weekday] ?? '');
+}
+
+function gridColumnClass(columnCount: number): string {
+  switch (columnCount) {
+    case 7:
+      return 'grid-cols-7';
+    case 6:
+      return 'grid-cols-6';
+    default:
+      return 'grid-cols-5';
+  }
+}
 
 interface TherapistOption {
   id: string;
@@ -46,7 +84,7 @@ type WorkingHoursMap = Map<string, TherapistWorkingHours[]>;
 
 type SlotStatus = 'busy' | 'free' | 'off';
 
-function buildMonthGrid(currentMonth: Date, showWeekends: boolean): Date[][] {
+function buildMonthGrid(currentMonth: Date, dayOrder: number[]): Date[][] {
   const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 });
   const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start, end });
@@ -54,15 +92,12 @@ function buildMonthGrid(currentMonth: Date, showWeekends: boolean): Date[][] {
 
   for (let index = 0; index < days.length; index += 7) {
     const slice = days.slice(index, index + 7);
-    const filtered = showWeekends
-      ? slice
-      : slice.filter((day) => {
-          const weekday = getDay(day);
-          return weekday !== 0 && weekday !== 6;
-        });
+    const ordered = dayOrder
+      .map((weekday) => slice.find((day) => getDay(day) === weekday))
+      .filter((value): value is Date => Boolean(value));
 
-    if (filtered.length > 0) {
-      weeks.push(filtered);
+    if (ordered.length > 0) {
+      weeks.push(ordered);
     }
   }
 
@@ -108,13 +143,37 @@ function groupWorkingHours(workingHours: TherapistWorkingHours[]): WorkingHoursM
 }
 
 function timeToMinutes(time: string): number {
-  const [hour, minute] = time.split(':').map((value) => parseInt(value, 10));
+  const [hoursPart, minutesPart] = time.split(':');
+  const hour = Number.parseInt(hoursPart ?? '', 10);
+  const minute = Number.parseInt(minutesPart ?? '', 10);
+
+  if (!Number.isFinite(hour)) {
+    return Number.NaN;
+  }
+
   return hour * 60 + (Number.isFinite(minute) ? minute : 0);
 }
 
-function useHourBlocks(workingHours: TherapistWorkingHours[], appointments: NormalizedAppointment[]) {
+function useHourBlocks(
+  workingHours: TherapistWorkingHours[],
+  appointments: NormalizedAppointment[],
+  centerOpensAt: string,
+  centerClosesAt: string,
+) {
   return useMemo(() => {
     const hours = new Set<number>();
+
+    const openMinutes = timeToMinutes(centerOpensAt);
+    const closeMinutes = timeToMinutes(centerClosesAt);
+
+    if (Number.isFinite(openMinutes) && Number.isFinite(closeMinutes) && openMinutes < closeMinutes) {
+      const startHour = Math.floor(openMinutes / 60);
+      const endHour = Math.ceil(closeMinutes / 60);
+
+      for (let hour = startHour; hour < endHour; hour += 1) {
+        hours.add(hour);
+      }
+    }
 
     workingHours.forEach((slot) => {
       const startHour = parseInt(slot.startTime.slice(0, 2), 10);
@@ -139,7 +198,7 @@ function useHourBlocks(workingHours: TherapistWorkingHours[], appointments: Norm
     }
 
     return Array.from(hours).sort((a, b) => a - b);
-  }, [appointments, workingHours]);
+  }, [appointments, centerClosesAt, centerOpensAt, workingHours]);
 }
 
 function getTherapistSlots(
@@ -148,9 +207,29 @@ function getTherapistSlots(
   hour: number,
   workingHours: WorkingHoursMap,
   appointments: AppointmentsByTherapist,
+  openOnSaturday: boolean,
+  openOnSunday: boolean,
+  centerOpenMinutes: number,
+  centerCloseMinutes: number,
 ): SlotStatus {
   const isoDate = format(date, 'yyyy-MM-dd');
   const dayOfWeek = getDay(date);
+
+  if ((dayOfWeek === 6 && !openOnSaturday) || (dayOfWeek === 0 && !openOnSunday)) {
+    return 'off';
+  }
+
+  if (
+    Number.isFinite(centerOpenMinutes) &&
+    Number.isFinite(centerCloseMinutes) &&
+    centerOpenMinutes < centerCloseMinutes
+  ) {
+    const hourStart = hour * 60;
+    if (hourStart < centerOpenMinutes || hourStart >= centerCloseMinutes) {
+      return 'off';
+    }
+  }
+
   const therapistHours = workingHours.get(therapistId) ?? [];
   const worksAtHour = therapistHours.some((slot) => {
     if (slot.dayOfWeek !== dayOfWeek) return false;
@@ -225,6 +304,10 @@ function GlobalDayCell({
   workingHours,
   appointments,
   isCurrentMonth,
+  openOnSaturday,
+  openOnSunday,
+  centerOpenMinutes,
+  centerCloseMinutes,
 }: {
   day: Date;
   therapists: TherapistOption[];
@@ -232,12 +315,26 @@ function GlobalDayCell({
   workingHours: WorkingHoursMap;
   appointments: AppointmentsByTherapist;
   isCurrentMonth: boolean;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
+  centerOpenMinutes: number;
+  centerCloseMinutes: number;
 }) {
   const slotSquares = hourBlocks.flatMap((hour) =>
     therapists.map((therapist) => ({
       therapist,
       hour,
-      status: getTherapistSlots(therapist.id, day, hour, workingHours, appointments),
+      status: getTherapistSlots(
+        therapist.id,
+        day,
+        hour,
+        workingHours,
+        appointments,
+        openOnSaturday,
+        openOnSunday,
+        centerOpenMinutes,
+        centerCloseMinutes,
+      ),
     })),
   );
 
@@ -287,7 +384,7 @@ interface TherapistMonthCalendarProps {
   appointments: AppointmentsByDate;
   currentMonth: Date;
   monthGrid: Date[][];
-  showWeekends: boolean;
+  dayLabels: string[];
 }
 
 function TherapistMonthCalendar({
@@ -295,9 +392,10 @@ function TherapistMonthCalendar({
   appointments,
   currentMonth,
   monthGrid,
-  showWeekends,
+  dayLabels,
 }: TherapistMonthCalendarProps) {
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: esLocale });
+  const columnClass = gridColumnClass(dayLabels.length);
 
   return (
     <Card>
@@ -308,8 +406,8 @@ function TherapistMonthCalendar({
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-4 sm:px-6 sm:pb-6">
         <div className="grid gap-4">
-          <div className={cn('grid gap-2', showWeekends ? 'grid-cols-7' : 'grid-cols-5')}>
-            {(showWeekends ? DAY_LABELS_FULL : DAY_LABELS_WEEK).map((label) => (
+          <div className={cn('grid gap-2', columnClass)}>
+            {dayLabels.map((label) => (
               <div key={label} className="text-center text-xs font-semibold uppercase text-muted-foreground">
                 {label}
               </div>
@@ -319,7 +417,7 @@ function TherapistMonthCalendar({
             {monthGrid.map((week, weekIndex) => (
               <div
                 key={weekIndex}
-                className={cn('grid gap-2', showWeekends ? 'grid-cols-7' : 'grid-cols-5')}
+                className={cn('grid gap-2', columnClass)}
               >
                 {week.map((day) => {
                   const isoDate = format(day, 'yyyy-MM-dd');
@@ -359,10 +457,18 @@ export default function CalendarPage() {
   const canViewOthers = isAdmin || settings.therapistCanViewOthers;
 
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
-  const [viewMode, setViewMode] = useState<'personal' | 'global'>('personal');
+  const [viewMode, setViewMode] = useState<'personal' | 'global'>(isAdmin ? 'global' : 'personal');
   const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() =>
     isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '',
   );
+  const adminViewInitializedRef = useRef(isAdmin);
+
+  useEffect(() => {
+    if (isAdmin && !adminViewInitializedRef.current) {
+      setViewMode('global');
+      adminViewInitializedRef.current = true;
+    }
+  }, [isAdmin]);
 
   const appointmentsByTherapist = useMemo(
     () => groupAppointmentsByTherapist(appointments),
@@ -370,7 +476,12 @@ export default function CalendarPage() {
   );
 
   const workingHoursMap = useMemo(() => groupWorkingHours(workingHours), [workingHours]);
-  const hourBlocks = useHourBlocks(workingHours, appointments);
+  const hourBlocks = useHourBlocks(
+    workingHours,
+    appointments,
+    settings.centerOpensAt,
+    settings.centerClosesAt,
+  );
 
   const baseTherapists: TherapistOption[] = useMemo(() => {
     const mapped = therapists.map((therapist) => ({ id: therapist.id, name: therapist.name }));
@@ -439,10 +550,22 @@ export default function CalendarPage() {
     }
   }, [resolvedSelectedTherapistId, selectedTherapistId]);
 
-  const monthGrid = useMemo(
-    () => buildMonthGrid(currentMonth, settings.showWeekends),
-    [currentMonth, settings.showWeekends],
+  const dayOrder = useMemo(
+    () => getVisibleDayOrder(settings.openOnSaturday, settings.openOnSunday),
+    [settings.openOnSaturday, settings.openOnSunday],
   );
+
+  const dayLabels = useMemo(() => getDayLabels(dayOrder), [dayOrder]);
+
+  const monthGrid = useMemo(
+    () => buildMonthGrid(currentMonth, dayOrder),
+    [currentMonth, dayOrder],
+  );
+
+  const showWeekends = settings.openOnSaturday || settings.openOnSunday;
+
+  const centerOpenMinutes = timeToMinutes(settings.centerOpensAt);
+  const centerCloseMinutes = timeToMinutes(settings.centerClosesAt);
 
   const isLoading = authLoading || appointmentsLoading || therapistsLoading;
 
@@ -465,7 +588,7 @@ export default function CalendarPage() {
           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             <span>Datos: {source === 'supabase' ? 'Supabase' : 'Ejemplo interno'}</span>
             <Separator orientation="vertical" className="h-3" />
-            <span>{settings.showWeekends ? 'Incluye fines de semana' : 'Sólo lunes a viernes'}</span>
+            <span>{showWeekends ? 'Incluye fines de semana' : 'Sólo lunes a viernes'}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -534,7 +657,7 @@ export default function CalendarPage() {
                         appointments={therapistAppointments}
                         currentMonth={currentMonth}
                         monthGrid={monthGrid}
-                        showWeekends={settings.showWeekends}
+                        dayLabels={dayLabels}
                       />
                     );
                   })}
@@ -551,7 +674,7 @@ export default function CalendarPage() {
                       appointments={therapistAppointments}
                       currentMonth={currentMonth}
                       monthGrid={monthGrid}
-                      showWeekends={settings.showWeekends}
+                      dayLabels={dayLabels}
                     />
                   </TabsContent>
                 );
@@ -594,8 +717,8 @@ export default function CalendarPage() {
 
                 <Card>
                   <CardContent className="p-4 sm:p-6">
-                    <div className={cn('grid gap-2', settings.showWeekends ? 'grid-cols-7' : 'grid-cols-5')}>
-                      {(settings.showWeekends ? DAY_LABELS_FULL : DAY_LABELS_WEEK).map((label) => (
+                    <div className={cn('grid gap-2', gridColumnClass(dayLabels.length))}>
+                      {dayLabels.map((label) => (
                         <div key={label} className="text-center text-xs font-semibold uppercase text-muted-foreground">
                           {label}
                         </div>
@@ -605,7 +728,7 @@ export default function CalendarPage() {
                       {monthGrid.map((week, weekIndex) => (
                         <div
                           key={weekIndex}
-                          className={cn('grid gap-2', settings.showWeekends ? 'grid-cols-7' : 'grid-cols-5')}
+                          className={cn('grid gap-2', gridColumnClass(dayLabels.length))}
                         >
                           {week.map((day) => (
                             <GlobalDayCell
@@ -616,6 +739,10 @@ export default function CalendarPage() {
                               workingHours={workingHoursMap}
                               appointments={appointmentsByTherapist}
                               isCurrentMonth={isSameMonth(day, currentMonth)}
+                              openOnSaturday={settings.openOnSaturday}
+                              openOnSunday={settings.openOnSunday}
+                              centerOpenMinutes={centerOpenMinutes}
+                              centerCloseMinutes={centerCloseMinutes}
                             />
                           ))}
                         </div>

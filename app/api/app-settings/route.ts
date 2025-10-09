@@ -6,7 +6,10 @@ import type { Database } from '@/types/supabase';
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
 
 const SETTINGS_KEYS = {
-  showWeekends: 'calendar_show_weekends',
+  centerOpensAt: 'center_open_time',
+  centerClosesAt: 'center_close_time',
+  openOnSaturday: 'center_open_saturday',
+  openOnSunday: 'center_open_sunday',
   therapistCanViewOthers: 'therapist_can_view_others',
   therapistCanEditOthers: 'therapist_can_edit_others',
 } as const;
@@ -14,13 +17,19 @@ const SETTINGS_KEYS = {
 type SettingKey = keyof typeof SETTINGS_KEYS;
 
 interface AppSettings {
-  showWeekends: boolean;
+  centerOpensAt: string;
+  centerClosesAt: string;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
   therapistCanViewOthers: boolean;
   therapistCanEditOthers: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  showWeekends: false,
+  centerOpensAt: '09:00',
+  centerClosesAt: '21:00',
+  openOnSaturday: false,
+  openOnSunday: false,
   therapistCanViewOthers: false,
   therapistCanEditOthers: false,
 };
@@ -40,6 +49,27 @@ function toBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function toTime(value: unknown, fallback: string): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      const hours = Math.min(23, Math.max(0, Number.parseInt(match[1], 10)));
+      const minutes = Math.min(59, Math.max(0, Number.parseInt(match[2], 10)));
+      return `${hours.toString().padStart(2, '0')}:${minutes
+        .toString()
+        .padStart(2, '0')}`;
+    }
+  }
+
+  if (typeof value === 'number') {
+    const hours = Math.min(23, Math.max(0, Math.floor(value)));
+    return `${hours.toString().padStart(2, '0')}:00`;
+  }
+
+  return fallback;
+}
+
 function mapRowsToSettings(rows: SettingsRow[] | null): AppSettings {
   const map = new Map<string, SettingsRow>();
   rows?.forEach((row) => {
@@ -47,7 +77,16 @@ function mapRowsToSettings(rows: SettingsRow[] | null): AppSettings {
   });
 
   return {
-    showWeekends: toBoolean(map.get(SETTINGS_KEYS.showWeekends)?.value ?? null, DEFAULT_SETTINGS.showWeekends),
+    centerOpensAt: toTime(map.get(SETTINGS_KEYS.centerOpensAt)?.value ?? null, DEFAULT_SETTINGS.centerOpensAt),
+    centerClosesAt: toTime(map.get(SETTINGS_KEYS.centerClosesAt)?.value ?? null, DEFAULT_SETTINGS.centerClosesAt),
+    openOnSaturday: toBoolean(
+      map.get(SETTINGS_KEYS.openOnSaturday)?.value ?? null,
+      DEFAULT_SETTINGS.openOnSaturday,
+    ),
+    openOnSunday: toBoolean(
+      map.get(SETTINGS_KEYS.openOnSunday)?.value ?? null,
+      DEFAULT_SETTINGS.openOnSunday,
+    ),
     therapistCanViewOthers: toBoolean(
       map.get(SETTINGS_KEYS.therapistCanViewOthers)?.value ?? null,
       DEFAULT_SETTINGS.therapistCanViewOthers,
@@ -114,11 +153,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const payload = (await request.json()) as Partial<Record<SettingKey, boolean>>;
+  const payload = (await request.json()) as Partial<Record<SettingKey, unknown>>;
 
-  const entries = Object.entries(payload).filter((entry): entry is [SettingKey, boolean] => {
-    const [key, value] = entry;
-    return key in SETTINGS_KEYS && typeof value === 'boolean';
+  const entries = Object.entries(payload).filter((entry): entry is [SettingKey, unknown] => {
+    const [key] = entry;
+    return key in SETTINGS_KEYS;
   });
 
   if (entries.length === 0) {
@@ -127,10 +166,19 @@ export async function PUT(request: Request) {
 
   const adminClient = await createAdminClient();
 
-  const upsertPayload = entries.map(([key, value]) => ({
-    key: SETTINGS_KEYS[key],
-    value,
-  }));
+  const upsertPayload = entries.map(([key, value]) => {
+    if (key === 'centerOpensAt' || key === 'centerClosesAt') {
+      const normalized = toTime(value, DEFAULT_SETTINGS[key]);
+      return { key: SETTINGS_KEYS[key], value: normalized };
+    }
+
+    if (key === 'openOnSaturday' || key === 'openOnSunday' || key === 'therapistCanViewOthers' || key === 'therapistCanEditOthers') {
+      const normalized = toBoolean(value, DEFAULT_SETTINGS[key]);
+      return { key: SETTINGS_KEYS[key], value: normalized };
+    }
+
+    return { key: SETTINGS_KEYS[key], value };
+  });
 
   const { error: upsertError } = await adminClient
     .from('settings')

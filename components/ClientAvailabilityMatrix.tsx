@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -149,7 +149,14 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editor de Disponibilidad</DialogTitle>
@@ -179,9 +186,8 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                   ))}
 
                   {HOURS.map(hour => (
-                    <>
+                    <Fragment key={hour}>
                       <div
-                        key={`hour-${hour}`}
                         className="bg-background p-2 text-sm text-muted-foreground text-right"
                         data-testid={`hour-label-${hour}`}
                       >
@@ -199,7 +205,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                           data-testid={`cell-${day.value}-${hour}`}
                         />
                       ))}
-                    </>
+                    </Fragment>
                   ))}
                 </div>
               </div>
