@@ -10,6 +10,7 @@ export interface User {
   profileImageUrl?: string | null;
   therapistId?: string | null;
   role?: "admin" | "therapist" | "client" | null;
+  mustChangePassword?: boolean | null;
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
 }

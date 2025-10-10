@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { ClientAvailability } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { useAppSettingsValue } from "@/hooks/useAppSettings";
+import { buildDayOptions, buildHourRange, deriveCenterHourBounds } from "@/lib/time-utils";
 
 interface ClientAvailabilityMatrixProps {
   open: boolean;
@@ -30,83 +31,20 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [dragState, setDragState] = useState<{ active: boolean; shouldSelect: boolean } | null>(null);
 
-  const { openingHour, closingHourExclusive } = useMemo(() => {
-    const parseTime = (value: string, fallback: number) => {
-      const [hourPart = "", minutePart = ""] = value.split(":");
-      const hours = Number.parseInt(hourPart, 10);
-      const minutes = Number.parseInt(minutePart, 10);
+  const hourBounds = useMemo(
+    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
+    [settings.centerClosesAt, settings.centerOpensAt],
+  );
 
-      if (!Number.isFinite(hours) || hours < 0 || hours > 23) {
-        return { hours: fallback, minutes: 0 };
-      }
+  const { openingHour, clientClosingExclusive } = hourBounds;
 
-      if (!Number.isFinite(minutes) || minutes < 0 || minutes > 59) {
-        return { hours, minutes: 0 };
-      }
-
-      return { hours, minutes };
-    };
-
-    const defaultOpen = 9;
-    const defaultClose = 21;
-
-    const { hours: opensAt, minutes: opensAtMinutes } = parseTime(
-      settings.centerOpensAt,
-      defaultOpen,
-    );
-    const { hours: closesAt, minutes: closesAtMinutes } = parseTime(
-      settings.centerClosesAt,
-      defaultClose,
-    );
-
-    let startHour = opensAt;
-    if (opensAtMinutes > 0) {
-      startHour += opensAtMinutes / 60;
-    }
-
-    let endHour = closesAt;
-    if (closesAtMinutes > 0) {
-      endHour += 1;
-    }
-
-    if (!Number.isFinite(startHour) || !Number.isFinite(endHour) || endHour <= startHour) {
-      startHour = defaultOpen;
-      endHour = defaultClose;
-    }
-
-    return {
-      openingHour: Math.floor(startHour),
-      closingHourExclusive: Math.ceil(endHour),
-    };
-  }, [settings.centerClosesAt, settings.centerOpensAt]);
-
-  const hours = useMemo(() => {
-    const list: number[] = [];
-    for (let hour = openingHour; hour < closingHourExclusive; hour++) {
-      list.push(hour);
-    }
-    return list;
-  }, [closingHourExclusive, openingHour]);
+  const hours = useMemo(
+    () => buildHourRange(openingHour, clientClosingExclusive),
+    [clientClosingExclusive, openingHour],
+  );
 
   const dayOptions = useMemo(
-    () =>
-      [
-        { name: "Lun", value: 1 },
-        { name: "Mar", value: 2 },
-        { name: "Mié", value: 3 },
-        { name: "Jue", value: 4 },
-        { name: "Vie", value: 5 },
-        { name: "Sáb", value: 6 },
-        { name: "Dom", value: 0 },
-      ].filter((day) => {
-        if (day.value === 6) {
-          return settings.openOnSaturday;
-        }
-        if (day.value === 0) {
-          return settings.openOnSunday;
-        }
-        return true;
-      }),
+    () => buildDayOptions(settings.openOnSaturday, settings.openOnSunday),
     [settings.openOnSaturday, settings.openOnSunday],
   );
 
@@ -178,7 +116,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
           allowedDayValues.has(dayValue) &&
           Number.isFinite(hourValue) &&
           hourValue >= openingHour &&
-          hourValue < closingHourExclusive
+          hourValue < clientClosingExclusive
         ) {
           filtered.add(key);
         } else {
@@ -192,7 +130,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
 
       return filtered;
     });
-  }, [allowedDayValues, closingHourExclusive, openingHour]);
+  }, [allowedDayValues, clientClosingExclusive, openingHour]);
 
   useEffect(() => {
     if (!open) return;
@@ -205,17 +143,17 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
       }
 
       const safeStart = Math.max(openingHour, avail.startHour);
-      const safeEnd = Math.min(closingHourExclusive, avail.endHour);
+      const safeEnd = Math.min(clientClosingExclusive, avail.endHour);
 
       for (let hour = safeStart; hour < safeEnd; hour++) {
-        if (hour >= openingHour && hour < closingHourExclusive) {
+        if (hour >= openingHour && hour < clientClosingExclusive) {
           cells.add(`${avail.dayOfWeek}-${hour}`);
         }
       }
     });
 
     setSelectedCells(cells);
-  }, [allowedDayValues, availability, closingHourExclusive, open, openingHour]);
+  }, [allowedDayValues, availability, clientClosingExclusive, open, openingHour]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: { dayOfWeek: number; startTime: string; endTime: string }[]) => {
@@ -260,7 +198,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
 
   const applyCellSelection = useCallback(
     (day: number, hour: number, shouldSelect: boolean) => {
-      if (!allowedDayValues.has(day) || hour < openingHour || hour >= closingHourExclusive) {
+      if (!allowedDayValues.has(day) || hour < openingHour || hour >= clientClosingExclusive) {
         return;
       }
 
@@ -285,7 +223,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
         return next;
       });
     },
-    [allowedDayValues, closingHourExclusive, openingHour],
+    [allowedDayValues, clientClosingExclusive, openingHour],
   );
 
   const toggleCell = useCallback(
@@ -359,8 +297,9 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
     dayOptions.forEach(day => {
       let blockStart: number | null = null;
 
-      for (let hour = openingHour; hour <= closingHourExclusive; hour++) {
-        const isSelected = hour < closingHourExclusive && selectedCells.has(`${day.value}-${hour}`);
+      for (let hour = openingHour; hour <= clientClosingExclusive; hour++) {
+        const isSelected =
+          hour < clientClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
@@ -378,7 +317,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
         blocks.push({
           dayOfWeek: day.value,
           startTime: `${blockStart.toString().padStart(2, '0')}:00`,
-          endTime: `${closingHourExclusive.toString().padStart(2, '0')}:00`,
+          endTime: `${clientClosingExclusive.toString().padStart(2, '0')}:00`,
         });
       }
     });

@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import type { TherapistWorkingHours } from "@shared/schema";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -12,25 +9,19 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, RotateCcw } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAppSettingsValue } from "@/hooks/useAppSettings";
+import { buildDayOptions, buildHourRange, deriveCenterHourBounds } from "@/lib/time-utils";
+import type { TherapistWorkingHours } from "@shared/schema";
 
 type DragState = { active: boolean; shouldSelect: boolean } | null;
 
-const HOURS = Array.from({ length: 12 }, (_, index) => 9 + index);
-const DAYS = [
-  { name: "Lun", value: 1 },
-  { name: "Mar", value: 2 },
-  { name: "Mié", value: 3 },
-  { name: "Jue", value: 4 },
-  { name: "Vie", value: 5 },
-  { name: "Sáb", value: 6 },
-  { name: "Dom", value: 0 },
-];
-
-function serializeCells(cells: Set<string>) {
+function serializeCells(cells: Set<string>): string {
   return Array.from(cells).sort().join("|");
 }
 
-function parseHour(value: string | null | undefined) {
+function parseHour(value: string | null | undefined): number | null {
   if (!value) {
     return null;
   }
@@ -58,9 +49,29 @@ export function TherapistScheduleDialog({
   onOpenChange,
 }: TherapistScheduleDialogProps) {
   const { toast } = useToast();
+  const settings = useAppSettingsValue();
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [dragState, setDragState] = useState<DragState>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<string>("");
+
+  const hourBounds = useMemo(
+    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
+    [settings.centerClosesAt, settings.centerOpensAt],
+  );
+
+  const { openingHour, therapistClosingExclusive, centerClosingExclusive } = hourBounds;
+
+  const hours = useMemo(
+    () => buildHourRange(openingHour, therapistClosingExclusive),
+    [openingHour, therapistClosingExclusive],
+  );
+
+  const dayOptions = useMemo(
+    () => buildDayOptions(settings.openOnSaturday, settings.openOnSunday),
+    [settings.openOnSaturday, settings.openOnSunday],
+  );
+
+  const allowedDayValues = useMemo(() => new Set(dayOptions.map((day) => day.value)), [dayOptions]);
 
   const {
     data: existingSchedule = [],
@@ -77,6 +88,10 @@ export function TherapistScheduleDialog({
       const cells = new Set<string>();
 
       schedule.forEach((slot) => {
+        if (!allowedDayValues.has(slot.dayOfWeek)) {
+          return;
+        }
+
         const startHour = parseHour(slot?.startTime ?? null);
         const endHour = parseHour(slot?.endTime ?? null);
 
@@ -84,11 +99,15 @@ export function TherapistScheduleDialog({
           return;
         }
 
-        const normalizedStart = Math.max(9, startHour as number);
-        const normalizedEnd = Math.min(21, Math.max(normalizedStart, endHour as number));
+        const normalizedStart = Math.max(openingHour, startHour as number);
+        const shouldExtendToClosing = (endHour as number) >= centerClosingExclusive;
+        const normalizedEnd = Math.min(
+          therapistClosingExclusive,
+          shouldExtendToClosing ? (endHour as number) + 1 : (endHour as number),
+        );
 
         for (let hour = normalizedStart; hour < normalizedEnd; hour++) {
-          if (hour >= 9 && hour < 21) {
+          if (hour >= openingHour && hour < therapistClosingExclusive) {
             cells.add(`${slot.dayOfWeek}-${hour}`);
           }
         }
@@ -97,7 +116,7 @@ export function TherapistScheduleDialog({
       setSelectedCells(cells);
       setInitialSnapshot(serializeCells(cells));
     },
-    [],
+    [allowedDayValues, centerClosingExclusive, openingHour, therapistClosingExclusive],
   );
 
   useEffect(() => {
@@ -107,6 +126,36 @@ export function TherapistScheduleDialog({
 
     rebuildSelectionFromSchedule(existingSchedule);
   }, [existingSchedule, open, rebuildSelectionFromSchedule]);
+
+  useEffect(() => {
+    setSelectedCells((previous) => {
+      let changed = false;
+      const filtered = new Set<string>();
+
+      previous.forEach((key) => {
+        const [dayPart, hourPart] = key.split("-");
+        const dayValue = Number.parseInt(dayPart, 10);
+        const hourValue = Number.parseInt(hourPart, 10);
+
+        if (
+          allowedDayValues.has(dayValue) &&
+          Number.isFinite(hourValue) &&
+          hourValue >= openingHour &&
+          hourValue < therapistClosingExclusive
+        ) {
+          filtered.add(key);
+        } else {
+          changed = true;
+        }
+      });
+
+      if (!changed && filtered.size === previous.size) {
+        return previous;
+      }
+
+      return filtered;
+    });
+  }, [allowedDayValues, openingHour, therapistClosingExclusive]);
 
   useEffect(() => {
     if (!dragState?.active) {
@@ -124,20 +173,27 @@ export function TherapistScheduleDialog({
     };
   }, [dragState]);
 
-  const applyCellSelection = useCallback((day: number, hour: number, shouldSelect: boolean) => {
-    setSelectedCells((previous) => {
-      const next = new Set(previous);
-      const key = `${day}-${hour}`;
-
-      if (shouldSelect) {
-        next.add(key);
-      } else {
-        next.delete(key);
+  const applyCellSelection = useCallback(
+    (day: number, hour: number, shouldSelect: boolean) => {
+      if (!allowedDayValues.has(day) || hour < openingHour || hour >= therapistClosingExclusive) {
+        return;
       }
 
-      return next;
-    });
-  }, []);
+      setSelectedCells((previous) => {
+        const next = new Set(previous);
+        const key = `${day}-${hour}`;
+
+        if (shouldSelect) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
+
+        return next;
+      });
+    },
+    [allowedDayValues, openingHour, therapistClosingExclusive],
+  );
 
   const toggleCell = useCallback(
     (day: number, hour: number) => {
@@ -191,23 +247,24 @@ export function TherapistScheduleDialog({
   }, [existingSchedule, rebuildSelectionFromSchedule]);
 
   const saveMutation = useMutation({
-    mutationFn: async (blocks: { dayOfWeek: number; startTime: string; endTime: string }[]) => {
-      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, { slots: blocks });
+    mutationFn: async (data: { dayOfWeek: number; startTime: string; endTime: string }[]) => {
+      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, { slots: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/therapists", therapistId, "schedule"] });
       queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
-      toast({
-        title: "Horario guardado",
-        description: "El horario del terapeuta ha sido actualizado exitosamente",
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/therapist-working-hours"] });
       setInitialSnapshot(serializeCells(selectedCells));
+      toast({
+        title: "Horario actualizado",
+        description: "Los bloques de trabajo se guardaron correctamente.",
+      });
       onOpenChange(false);
     },
-    onError: (error: Error) => {
+    onError: (mutationError: Error) => {
       toast({
-        title: "Error",
-        description: error.message || "No se pudo guardar el horario",
+        title: "Error al guardar",
+        description: mutationError.message || "No se pudo guardar el horario del terapeuta.",
         variant: "destructive",
       });
     },
@@ -216,30 +273,37 @@ export function TherapistScheduleDialog({
   const handleSave = () => {
     const blocks: { dayOfWeek: number; startTime: string; endTime: string }[] = [];
 
-    DAYS.forEach((day) => {
+    dayOptions.forEach((day) => {
       let blockStart: number | null = null;
 
-      for (let hour = 9; hour <= 21; hour++) {
-        const isSelected = hour < 21 && selectedCells.has(`${day.value}-${hour}`);
+      for (let hour = openingHour; hour <= therapistClosingExclusive; hour++) {
+        const isSelected =
+          hour < therapistClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
         } else if (!isSelected && blockStart !== null) {
-          blocks.push({
-            dayOfWeek: day.value,
-            startTime: `${blockStart.toString().padStart(2, "0")}:00`,
-            endTime: `${hour.toString().padStart(2, "0")}:00`,
-          });
+          const cappedEnd = Math.min(hour, centerClosingExclusive);
+          if (cappedEnd > blockStart) {
+            blocks.push({
+              dayOfWeek: day.value,
+              startTime: `${blockStart.toString().padStart(2, "0")}:00`,
+              endTime: `${cappedEnd.toString().padStart(2, "0")}:00`,
+            });
+          }
           blockStart = null;
         }
       }
 
       if (blockStart !== null) {
-        blocks.push({
-          dayOfWeek: day.value,
-          startTime: `${blockStart.toString().padStart(2, "0")}:00`,
-          endTime: "21:00",
-        });
+        const finalEnd = Math.min(therapistClosingExclusive, centerClosingExclusive);
+        if (finalEnd > blockStart) {
+          blocks.push({
+            dayOfWeek: day.value,
+            startTime: `${blockStart.toString().padStart(2, "0")}:00`,
+            endTime: `${finalEnd.toString().padStart(2, "0")}:00`,
+          });
+        }
       }
     });
 
@@ -247,18 +311,16 @@ export function TherapistScheduleDialog({
   };
 
   const isSaving = saveMutation.isPending;
-  const hasChanges = useMemo(
-    () => serializeCells(selectedCells) !== initialSnapshot,
-    [selectedCells, initialSnapshot],
-  );
+  const hasChanges = useMemo(() => serializeCells(selectedCells) !== initialSnapshot, [selectedCells, initialSnapshot]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl" data-testid="dialog-manage-schedule">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Gestionar Horario - {therapistName}</DialogTitle>
+          <DialogTitle>Gestionar horario de {therapistName}</DialogTitle>
           <DialogDescription>
-            Marca los bloques disponibles haciendo clic o arrastrando sobre la cuadrícula
+            Pinta los bloques en los que el terapeuta trabajará. Los horarios se ajustan automáticamente a la
+            configuración del centro.
           </DialogDescription>
         </DialogHeader>
 
@@ -269,13 +331,15 @@ export function TherapistScheduleDialog({
         ) : error ? (
           <div className="space-y-4">
             <p className="text-sm text-destructive">
-              {error instanceof Error
-                ? error.message
-                : "No se pudo cargar el horario del terapeuta."}
+              {error instanceof Error ? error.message : "No se pudo cargar el horario del terapeuta."}
             </p>
             <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
               Reintentar
             </Button>
+          </div>
+        ) : dayOptions.length === 0 || hours.length === 0 ? (
+          <div className="py-12 text-center text-muted-foreground">
+            Configura primero los horarios y días de apertura del centro para gestionar los horarios.
           </div>
         ) : (
           <div className="space-y-4">
@@ -283,10 +347,10 @@ export function TherapistScheduleDialog({
               <div className="inline-block min-w-full">
                 <div
                   className="grid gap-px bg-border"
-                  style={{ gridTemplateColumns: `60px repeat(${DAYS.length}, 1fr)` }}
+                  style={{ gridTemplateColumns: `60px repeat(${dayOptions.length}, 1fr)` }}
                 >
                   <div className="bg-background p-2" />
-                  {DAYS.map((day) => (
+                  {dayOptions.map((day) => (
                     <div
                       key={day.value}
                       className="bg-background p-2 text-center text-sm font-medium"
@@ -296,7 +360,7 @@ export function TherapistScheduleDialog({
                     </div>
                   ))}
 
-                  {HOURS.map((hour) => (
+                  {hours.map((hour) => (
                     <div key={hour} className="contents">
                       <div
                         className="bg-background p-2 text-sm text-muted-foreground text-right"
@@ -304,11 +368,12 @@ export function TherapistScheduleDialog({
                       >
                         {hour}:00
                       </div>
-                      {DAYS.map((day) => {
-                        const isSelected = selectedCells.has(`${day.value}-${hour}`);
+                      {dayOptions.map((day) => {
+                        const key = `${day.value}-${hour}`;
+                        const isSelected = selectedCells.has(key);
                         return (
                           <button
-                            key={`${day.value}-${hour}`}
+                            key={key}
                             type="button"
                             onPointerDown={handlePointerDown(day.value, hour)}
                             onPointerEnter={handlePointerEnter(day.value, hour)}
@@ -320,9 +385,7 @@ export function TherapistScheduleDialog({
                               }
                             }}
                             className={`p-2 min-h-[40px] transition-colors hover-elevate active-elevate-2 ${
-                              isSelected
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
+                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
                             }`}
                             aria-pressed={isSelected}
                             data-testid={`therapist-cell-${day.value}-${hour}`}
@@ -341,24 +404,18 @@ export function TherapistScheduleDialog({
                 variant="outline"
                 onClick={resetSelection}
                 disabled={isSaving || !hasChanges}
-                data-testid="button-reset-therapist-schedule"
               >
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Descartar cambios
               </Button>
-              <Button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving || !hasChanges}
-                data-testid="button-save-schedule"
-              >
+              <Button type="button" onClick={handleSave} disabled={isSaving || !hasChanges}>
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Guardando...
                   </>
                 ) : (
-                  "Guardar"
+                  "Guardar horario"
                 )}
               </Button>
             </div>

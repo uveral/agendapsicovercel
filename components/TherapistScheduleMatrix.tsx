@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAppSettingsValue } from '@/hooks/useAppSettings';
 import type { TherapistWorkingHours } from '@/lib/types';
+import { buildDayOptions, buildHourRange, deriveCenterHourBounds } from '@/lib/time-utils';
 
 interface TherapistScheduleMatrixProps {
   therapistId: string;
@@ -43,83 +44,20 @@ export function TherapistScheduleMatrix({
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
-  const { openingHour, closingHourExclusive } = useMemo(() => {
-    const parseTime = (value: string, fallback: number) => {
-      const [hourPart = '', minutePart = ''] = value.split(':');
-      const hours = Number.parseInt(hourPart, 10);
-      const minutes = Number.parseInt(minutePart, 10);
+  const hourBounds = useMemo(
+    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
+    [settings.centerClosesAt, settings.centerOpensAt],
+  );
 
-      if (!Number.isFinite(hours) || hours < 0 || hours > 23) {
-        return { hours: fallback, minutes: 0 };
-      }
+  const { openingHour, therapistClosingExclusive, centerClosingExclusive } = hourBounds;
 
-      if (!Number.isFinite(minutes) || minutes < 0 || minutes > 59) {
-        return { hours, minutes: 0 };
-      }
-
-      return { hours, minutes };
-    };
-
-    const defaultOpen = 9;
-    const defaultClose = 21;
-
-    const { hours: opensAt, minutes: opensAtMinutes } = parseTime(
-      settings.centerOpensAt,
-      defaultOpen,
-    );
-    const { hours: closesAt, minutes: closesAtMinutes } = parseTime(
-      settings.centerClosesAt,
-      defaultClose,
-    );
-
-    let startHour = opensAt;
-    if (opensAtMinutes > 0) {
-      startHour += opensAtMinutes / 60;
-    }
-
-    let endHour = closesAt;
-    if (closesAtMinutes > 0) {
-      endHour += 1;
-    }
-
-    if (!Number.isFinite(startHour) || !Number.isFinite(endHour) || endHour <= startHour) {
-      startHour = defaultOpen;
-      endHour = defaultClose;
-    }
-
-    return {
-      openingHour: Math.floor(startHour),
-      closingHourExclusive: Math.ceil(endHour),
-    };
-  }, [settings.centerClosesAt, settings.centerOpensAt]);
-
-  const hours = useMemo(() => {
-    const list: number[] = [];
-    for (let hour = openingHour; hour < closingHourExclusive; hour++) {
-      list.push(hour);
-    }
-    return list;
-  }, [closingHourExclusive, openingHour]);
+  const hours = useMemo(
+    () => buildHourRange(openingHour, therapistClosingExclusive),
+    [openingHour, therapistClosingExclusive],
+  );
 
   const dayOptions = useMemo(
-    () =>
-      [
-        { name: 'Lun', value: 1 },
-        { name: 'Mar', value: 2 },
-        { name: 'Mié', value: 3 },
-        { name: 'Jue', value: 4 },
-        { name: 'Vie', value: 5 },
-        { name: 'Sáb', value: 6 },
-        { name: 'Dom', value: 0 },
-      ].filter((day) => {
-        if (day.value === 6) {
-          return settings.openOnSaturday;
-        }
-        if (day.value === 0) {
-          return settings.openOnSunday;
-        }
-        return true;
-      }),
+    () => buildDayOptions(settings.openOnSaturday, settings.openOnSunday),
     [settings.openOnSaturday, settings.openOnSunday],
   );
 
@@ -192,17 +130,19 @@ export function TherapistScheduleMatrix({
       }
 
       const safeStart = Math.max(openingHour, slot.startHour);
-      const safeEnd = Math.min(closingHourExclusive, slot.endHour);
+      const shouldExtendToClosing = slot.endHour >= centerClosingExclusive;
+      const cappedEnd = shouldExtendToClosing ? slot.endHour + 1 : slot.endHour;
+      const safeEnd = Math.min(therapistClosingExclusive, cappedEnd);
 
       for (let hour = safeStart; hour < safeEnd; hour++) {
-        if (hour >= openingHour && hour < closingHourExclusive) {
+        if (hour >= openingHour && hour < therapistClosingExclusive) {
           cells.add(`${slot.dayOfWeek}-${hour}`);
         }
       }
     });
 
     return cells;
-  }, [allowedDayValues, closingHourExclusive, normalizedSchedule, openingHour]);
+  }, [allowedDayValues, centerClosingExclusive, normalizedSchedule, openingHour, therapistClosingExclusive]);
 
   useEffect(() => {
     if (hydratedKey === scheduleKey) {
@@ -230,7 +170,7 @@ export function TherapistScheduleMatrix({
           allowedDayValues.has(dayValue) &&
           Number.isFinite(hourValue) &&
           hourValue >= openingHour &&
-          hourValue < closingHourExclusive
+          hourValue < therapistClosingExclusive
         ) {
           filtered.add(key);
         } else {
@@ -244,7 +184,7 @@ export function TherapistScheduleMatrix({
 
       return filtered;
     });
-  }, [allowedDayValues, closingHourExclusive, openingHour]);
+  }, [allowedDayValues, openingHour, therapistClosingExclusive]);
 
   const applyCellSelection = useCallback(
     (day: number, hour: number, shouldSelect: boolean) => {
@@ -252,7 +192,7 @@ export function TherapistScheduleMatrix({
         return;
       }
 
-      if (!allowedDayValues.has(day) || hour < openingHour || hour >= closingHourExclusive) {
+      if (!allowedDayValues.has(day) || hour < openingHour || hour >= therapistClosingExclusive) {
         return;
       }
 
@@ -277,7 +217,7 @@ export function TherapistScheduleMatrix({
         return next;
       });
     },
-    [allowedDayValues, canEdit, closingHourExclusive, openingHour],
+    [allowedDayValues, canEdit, openingHour, therapistClosingExclusive],
   );
 
   const toggleCell = useCallback(
@@ -385,27 +325,34 @@ export function TherapistScheduleMatrix({
     dayOptions.forEach((day) => {
       let blockStart: number | null = null;
 
-      for (let hour = openingHour; hour <= closingHourExclusive; hour++) {
-        const isSelected = hour < closingHourExclusive && selectedCells.has(`${day.value}-${hour}`);
+      for (let hour = openingHour; hour <= therapistClosingExclusive; hour++) {
+        const isSelected =
+          hour < therapistClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
         } else if (!isSelected && blockStart !== null) {
-          blocks.push({
-            dayOfWeek: day.value,
-            startTime: `${blockStart.toString().padStart(2, '0')}:00`,
-            endTime: `${hour.toString().padStart(2, '0')}:00`,
-          });
+          const cappedEnd = Math.min(hour, centerClosingExclusive);
+          if (cappedEnd > blockStart) {
+            blocks.push({
+              dayOfWeek: day.value,
+              startTime: `${blockStart.toString().padStart(2, '0')}:00`,
+              endTime: `${cappedEnd.toString().padStart(2, '0')}:00`,
+            });
+          }
           blockStart = null;
         }
       }
 
       if (blockStart !== null) {
-        blocks.push({
-          dayOfWeek: day.value,
-          startTime: `${blockStart.toString().padStart(2, '0')}:00`,
-          endTime: `${closingHourExclusive.toString().padStart(2, '0')}:00`,
-        });
+        const finalEnd = Math.min(therapistClosingExclusive, centerClosingExclusive);
+        if (finalEnd > blockStart) {
+          blocks.push({
+            dayOfWeek: day.value,
+            startTime: `${blockStart.toString().padStart(2, '0')}:00`,
+            endTime: `${finalEnd.toString().padStart(2, '0')}:00`,
+          });
+        }
       }
     });
 

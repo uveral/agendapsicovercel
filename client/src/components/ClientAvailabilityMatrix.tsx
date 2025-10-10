@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Loader2, RotateCcw } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAppSettingsValue } from "@/hooks/useAppSettings";
+import { buildDayOptions, buildHourRange, deriveCenterHourBounds } from "@/lib/time-utils";
 import type { ClientAvailability } from "@shared/schema";
-import { Loader2, RotateCcw } from "lucide-react";
 
 interface ClientAvailabilityMatrixProps {
   open: boolean;
@@ -15,22 +23,11 @@ interface ClientAvailabilityMatrixProps {
 
 type DragState = { active: boolean; shouldSelect: boolean } | null;
 
-const HOURS = Array.from({ length: 12 }, (_, index) => 9 + index);
-const DAYS = [
-  { name: "Lun", value: 1 },
-  { name: "Mar", value: 2 },
-  { name: "Mié", value: 3 },
-  { name: "Jue", value: 4 },
-  { name: "Vie", value: 5 },
-  { name: "Sáb", value: 6 },
-  { name: "Dom", value: 0 },
-];
-
-function serializeCells(cells: Set<string>) {
+function serializeCells(cells: Set<string>): string {
   return Array.from(cells).sort().join("|");
 }
 
-function parseHour(value: string | null | undefined) {
+function parseHour(value: string | null | undefined): number | null {
   if (!value) {
     return null;
   }
@@ -44,11 +41,35 @@ function parseHour(value: string | null | undefined) {
   return Number.isFinite(hour) ? hour : null;
 }
 
-export default function ClientAvailabilityMatrix({ open, clientId, onClose }: ClientAvailabilityMatrixProps) {
+export default function ClientAvailabilityMatrix({
+  open,
+  clientId,
+  onClose,
+}: ClientAvailabilityMatrixProps) {
   const { toast } = useToast();
+  const settings = useAppSettingsValue();
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [dragState, setDragState] = useState<DragState>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<string>("");
+
+  const hourBounds = useMemo(
+    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
+    [settings.centerClosesAt, settings.centerOpensAt],
+  );
+
+  const { openingHour, clientClosingExclusive } = hourBounds;
+
+  const hours = useMemo(
+    () => buildHourRange(openingHour, clientClosingExclusive),
+    [clientClosingExclusive, openingHour],
+  );
+
+  const dayOptions = useMemo(
+    () => buildDayOptions(settings.openOnSaturday, settings.openOnSunday),
+    [settings.openOnSaturday, settings.openOnSunday],
+  );
+
+  const allowedDayValues = useMemo(() => new Set(dayOptions.map((day) => day.value)), [dayOptions]);
 
   const {
     data: availability = [],
@@ -60,30 +81,37 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
     enabled: open && !!clientId,
   });
 
-  const rebuildSelectionFromAvailability = useCallback((slots: ClientAvailability[]) => {
-    const cells = new Set<string>();
+  const rebuildSelectionFromAvailability = useCallback(
+    (slots: ClientAvailability[]) => {
+      const cells = new Set<string>();
 
-    slots.forEach((slot) => {
-      const startHour = parseHour(slot?.startTime ?? null);
-      const endHour = parseHour(slot?.endTime ?? null);
-
-      if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) {
-        return;
-      }
-
-      const normalizedStart = Math.max(9, startHour as number);
-      const normalizedEnd = Math.min(21, Math.max(normalizedStart, endHour as number));
-
-      for (let hour = normalizedStart; hour < normalizedEnd; hour++) {
-        if (hour >= 9 && hour < 21) {
-          cells.add(`${slot.dayOfWeek}-${hour}`);
+      slots.forEach((slot) => {
+        if (!allowedDayValues.has(slot.dayOfWeek)) {
+          return;
         }
-      }
-    });
 
-    setSelectedCells(cells);
-    setInitialSnapshot(serializeCells(cells));
-  }, []);
+        const startHour = parseHour(slot?.startTime ?? null);
+        const endHour = parseHour(slot?.endTime ?? null);
+
+        if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) {
+          return;
+        }
+
+        const normalizedStart = Math.max(openingHour, startHour as number);
+        const normalizedEnd = Math.min(clientClosingExclusive, Math.max(normalizedStart, endHour as number));
+
+        for (let hour = normalizedStart; hour < normalizedEnd; hour++) {
+          if (hour >= openingHour && hour < clientClosingExclusive) {
+            cells.add(`${slot.dayOfWeek}-${hour}`);
+          }
+        }
+      });
+
+      setSelectedCells(cells);
+      setInitialSnapshot(serializeCells(cells));
+    },
+    [allowedDayValues, clientClosingExclusive, openingHour],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -92,6 +120,36 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
 
     rebuildSelectionFromAvailability(availability);
   }, [availability, open, rebuildSelectionFromAvailability]);
+
+  useEffect(() => {
+    setSelectedCells((previous) => {
+      let changed = false;
+      const filtered = new Set<string>();
+
+      previous.forEach((key) => {
+        const [dayPart, hourPart] = key.split("-");
+        const dayValue = Number.parseInt(dayPart, 10);
+        const hourValue = Number.parseInt(hourPart, 10);
+
+        if (
+          allowedDayValues.has(dayValue) &&
+          Number.isFinite(hourValue) &&
+          hourValue >= openingHour &&
+          hourValue < clientClosingExclusive
+        ) {
+          filtered.add(key);
+        } else {
+          changed = true;
+        }
+      });
+
+      if (!changed && filtered.size === previous.size) {
+        return previous;
+      }
+
+      return filtered;
+    });
+  }, [allowedDayValues, clientClosingExclusive, openingHour]);
 
   useEffect(() => {
     if (!dragState?.active) {
@@ -109,20 +167,27 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
     };
   }, [dragState]);
 
-  const applyCellSelection = useCallback((day: number, hour: number, shouldSelect: boolean) => {
-    setSelectedCells((previous) => {
-      const next = new Set(previous);
-      const key = `${day}-${hour}`;
-
-      if (shouldSelect) {
-        next.add(key);
-      } else {
-        next.delete(key);
+  const applyCellSelection = useCallback(
+    (day: number, hour: number, shouldSelect: boolean) => {
+      if (!allowedDayValues.has(day) || hour < openingHour || hour >= clientClosingExclusive) {
+        return;
       }
 
-      return next;
-    });
-  }, []);
+      setSelectedCells((previous) => {
+        const next = new Set(previous);
+        const key = `${day}-${hour}`;
+
+        if (shouldSelect) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
+
+        return next;
+      });
+    },
+    [allowedDayValues, clientClosingExclusive, openingHour],
+  );
 
   const toggleCell = useCallback(
     (day: number, hour: number) => {
@@ -220,11 +285,12 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
   const handleSave = () => {
     const blocks: { dayOfWeek: number; startTime: string; endTime: string }[] = [];
 
-    DAYS.forEach((day) => {
+    dayOptions.forEach((day) => {
       let blockStart: number | null = null;
 
-      for (let hour = 9; hour <= 21; hour++) {
-        const isSelected = hour < 21 && selectedCells.has(`${day.value}-${hour}`);
+      for (let hour = openingHour; hour <= clientClosingExclusive; hour++) {
+        const isSelected =
+          hour < clientClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
@@ -242,7 +308,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
         blocks.push({
           dayOfWeek: day.value,
           startTime: `${blockStart.toString().padStart(2, "0")}:00`,
-          endTime: "21:00",
+          endTime: `${clientClosingExclusive.toString().padStart(2, "0")}:00`,
         });
       }
     });
@@ -257,7 +323,14 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
   );
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editor de Disponibilidad</DialogTitle>
@@ -273,13 +346,15 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
         ) : error ? (
           <div className="space-y-4">
             <p className="text-sm text-destructive">
-              {error instanceof Error
-                ? error.message
-                : "No se pudo cargar la disponibilidad del cliente."}
+              {error instanceof Error ? error.message : "No se pudo cargar la disponibilidad del cliente."}
             </p>
             <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
               Reintentar
             </Button>
+          </div>
+        ) : dayOptions.length === 0 || hours.length === 0 ? (
+          <div className="py-12 text-center text-muted-foreground">
+            Configura primero los horarios y días de apertura del centro para gestionar la disponibilidad.
           </div>
         ) : (
           <div className="space-y-4">
@@ -287,10 +362,10 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
               <div className="inline-block min-w-full">
                 <div
                   className="grid gap-px bg-border"
-                  style={{ gridTemplateColumns: `60px repeat(${DAYS.length}, 1fr)` }}
+                  style={{ gridTemplateColumns: `60px repeat(${dayOptions.length}, 1fr)` }}
                 >
                   <div className="bg-background p-2" />
-                  {DAYS.map((day) => (
+                  {dayOptions.map((day) => (
                     <div
                       key={day.value}
                       className="bg-background p-2 text-center text-sm font-medium"
@@ -300,7 +375,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                     </div>
                   ))}
 
-                  {HOURS.map((hour) => (
+                  {hours.map((hour) => (
                     <div key={hour} className="contents">
                       <div
                         className="bg-background p-2 text-sm text-muted-foreground text-right"
@@ -308,11 +383,12 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                       >
                         {hour}:00
                       </div>
-                      {DAYS.map((day) => {
-                        const isSelected = selectedCells.has(`${day.value}-${hour}`);
+                      {dayOptions.map((day) => {
+                        const key = `${day.value}-${hour}`;
+                        const isSelected = selectedCells.has(key);
                         return (
                           <button
-                            key={`${day.value}-${hour}`}
+                            key={key}
                             type="button"
                             onPointerDown={handlePointerDown(day.value, hour)}
                             onPointerEnter={handlePointerEnter(day.value, hour)}
@@ -324,9 +400,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                               }
                             }}
                             className={`p-2 min-h-[40px] transition-colors hover-elevate active-elevate-2 ${
-                              isSelected
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
+                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
                             }`}
                             aria-pressed={isSelected}
                             data-testid={`cell-${day.value}-${hour}`}
