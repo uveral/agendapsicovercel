@@ -179,27 +179,17 @@ export async function POST(request: Request) {
     );
   }
 
-  if (existingAuthUser) {
-    const linkedTherapistId = (() => {
-      const metadata = (existingAuthUser.user_metadata ?? {}) as Record<string, unknown>;
-      const therapistId = metadata.therapist_id;
-      return typeof therapistId === 'string' && therapistId.length > 0 ? therapistId : null;
-    })();
-    const existingRole = (() => {
-      const metadata = (existingAuthUser.user_metadata ?? {}) as Record<string, unknown>;
-      const role = metadata.role;
-      return typeof role === 'string' ? role : null;
-    })();
+  let existingAuthUserTherapistId: string | null = null;
+  let existingAuthUserRole: string | null = null;
 
-    if (linkedTherapistId || (existingRole && existingRole !== 'client')) {
-      return NextResponse.json(
-        {
-          error:
-            'Este correo ya está vinculado a otro usuario del sistema. Utiliza una dirección diferente o elimina primero la cuenta existente.',
-        },
-        { status: 409 },
-      );
-    }
+  if (existingAuthUser) {
+    const metadata = (existingAuthUser.user_metadata ?? {}) as Record<string, unknown>;
+    const therapistId = metadata.therapist_id;
+    const role = metadata.role;
+
+    existingAuthUserTherapistId =
+      typeof therapistId === 'string' && therapistId.length > 0 ? therapistId : null;
+    existingAuthUserRole = typeof role === 'string' && role.length > 0 ? role : null;
   }
 
   const { data: existingAccountRows, error: existingAccountError } = await adminClient
@@ -217,12 +207,79 @@ export async function POST(request: Request) {
 
   const existingAccount = (existingAccountRows?.[0] ?? null) as UserAccountSummary | null;
 
-  if (existingAccount) {
-    const message = existingAccount.therapist_id
-      ? 'Este correo ya está vinculado a otro terapeuta. Utiliza una dirección diferente.'
-      : 'Este correo ya pertenece a otro usuario. Utiliza una dirección diferente.';
+  const therapistIdsToValidate = [
+    existingAccount?.therapist_id ?? null,
+    existingAuthUserTherapistId,
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
 
-    return NextResponse.json({ error: message }, { status: 409 });
+  let activeTherapistIdSet: Set<string> | null = null;
+
+  if (therapistIdsToValidate.length > 0) {
+    const { data: therapistLinkRows, error: therapistLookupError } = await adminClient
+      .from('therapists')
+      .select('id')
+      .in('id', therapistIdsToValidate);
+
+    if (therapistLookupError) {
+      return NextResponse.json(
+        { error: therapistLookupError.message ?? 'No se pudo validar el estado del terapeuta existente.' },
+        { status: 500 },
+      );
+    }
+
+    const sanitizedTherapistLinks = (therapistLinkRows ?? []) as Array<{ id: string }>;
+
+    activeTherapistIdSet = new Set(sanitizedTherapistLinks.map(link => link.id));
+  }
+
+  const authUserHasActiveTherapist = Boolean(
+    existingAuthUserTherapistId && activeTherapistIdSet?.has(existingAuthUserTherapistId),
+  );
+
+  const accountHasActiveTherapist = Boolean(
+    existingAccount?.therapist_id && activeTherapistIdSet?.has(existingAccount.therapist_id),
+  );
+
+  if (authUserHasActiveTherapist || accountHasActiveTherapist) {
+    return NextResponse.json(
+      {
+        error:
+          'Este correo ya está vinculado a otro terapeuta. Utiliza una dirección diferente o elimina primero la cuenta existente.',
+      },
+      { status: 409 },
+    );
+  }
+
+  const authUserRoleIsConflicting = Boolean(
+    existingAuthUserRole &&
+      existingAuthUserRole !== 'therapist' &&
+      existingAuthUserRole !== 'admin',
+  );
+
+  if (authUserRoleIsConflicting) {
+    return NextResponse.json(
+      {
+        error:
+          'Este correo ya está asignado a otro usuario del sistema. Utiliza una dirección diferente o libera primero la cuenta existente.',
+      },
+      { status: 409 },
+    );
+  }
+
+  if (
+    existingAccount &&
+    !existingAccount.therapist_id &&
+    existingAccount.role &&
+    existingAccount.role !== 'therapist' &&
+    existingAccount.role !== 'admin'
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'Este correo ya está asignado a otro usuario del sistema. Utiliza una dirección diferente o libera primero la cuenta existente.',
+      },
+      { status: 409 },
+    );
   }
 
   const dbData = toSnakeCase(sanitizedBody);
