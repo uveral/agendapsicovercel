@@ -1,7 +1,14 @@
 
 'use client';
 
-import { Fragment, useState, useEffect, useMemo } from "react";
+import {
+  Fragment,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -21,6 +28,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
   const { toast } = useToast();
   const settings = useAppSettingsValue();
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [dragState, setDragState] = useState<{ active: boolean; shouldSelect: boolean } | null>(null);
 
   const { openingHour, closingHourExclusive } = useMemo(() => {
     const parseTime = (value: string, fallback: number) => {
@@ -250,18 +258,100 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
     },
   });
 
-  const toggleCell = (day: number, hour: number) => {
-    const key = `${day}-${hour}`;
-    const newSelected = new Set(selectedCells);
-    
-    if (newSelected.has(key)) {
-      newSelected.delete(key);
-    } else {
-      newSelected.add(key);
+  const applyCellSelection = useCallback(
+    (day: number, hour: number, shouldSelect: boolean) => {
+      if (!allowedDayValues.has(day) || hour < openingHour || hour >= closingHourExclusive) {
+        return;
+      }
+
+      const key = `${day}-${hour}`;
+
+      setSelectedCells((previous) => {
+        const next = new Set(previous);
+
+        if (shouldSelect) {
+          if (next.has(key)) {
+            return previous;
+          }
+          next.add(key);
+          return next;
+        }
+
+        if (!next.has(key)) {
+          return previous;
+        }
+
+        next.delete(key);
+        return next;
+      });
+    },
+    [allowedDayValues, closingHourExclusive, openingHour],
+  );
+
+  const toggleCell = useCallback(
+    (day: number, hour: number) => {
+      const key = `${day}-${hour}`;
+      const shouldSelect = !selectedCells.has(key);
+      applyCellSelection(day, hour, shouldSelect);
+    },
+    [applyCellSelection, selectedCells],
+  );
+
+  const handlePointerDown = useCallback(
+    (day: number, hour: number) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const key = `${day}-${hour}`;
+      const shouldSelect = !selectedCells.has(key);
+
+      setDragState({ active: true, shouldSelect });
+      applyCellSelection(day, hour, shouldSelect);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    [applyCellSelection, selectedCells],
+  );
+
+  const handlePointerEnter = useCallback(
+    (day: number, hour: number) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (!dragState?.active) {
+        return;
+      }
+
+      event.preventDefault();
+      applyCellSelection(day, hour, dragState.shouldSelect);
+    },
+    [applyCellSelection, dragState],
+  );
+
+  const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!dragState?.active) {
+      return;
     }
-    
-    setSelectedCells(newSelected);
-  };
+
+    event.preventDefault();
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    setDragState(null);
+  }, [dragState]);
+
+  useEffect(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
+    const handleWindowPointerUp = () => {
+      setDragState(null);
+    };
+
+    window.addEventListener("pointerup", handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+    };
+  }, [dragState]);
 
   const handleSave = () => {
     const blocks: { dayOfWeek: number; startTime: string; endTime: string }[] = [];
@@ -356,12 +446,22 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                       {dayOptions.map(day => (
                         <button
                           key={`${day.value}-${hour}`}
-                          onClick={() => toggleCell(day.value, hour)}
+                          type="button"
+                          onPointerDown={handlePointerDown(day.value, hour)}
+                          onPointerEnter={handlePointerEnter(day.value, hour)}
+                          onPointerUp={handlePointerUp}
+                          onKeyDown={(event) => {
+                            if (event.key === " " || event.key === "Enter") {
+                              event.preventDefault();
+                              toggleCell(day.value, hour);
+                            }
+                          }}
                           className={`p-2 min-h-[40px] transition-colors hover-elevate active-elevate-2 ${
                             isCellSelected(day.value, hour)
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted'
                           }`}
+                          aria-pressed={isCellSelected(day.value, hour)}
                           data-testid={`cell-${day.value}-${hour}`}
                         />
                       ))}
