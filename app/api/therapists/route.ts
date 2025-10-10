@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 function toCamelCase<T = unknown>(obj: T): T {
@@ -30,6 +30,9 @@ function toSnakeCase<T = unknown>(obj: T): T {
   return obj;
 }
 
+const DEFAULT_PASSWORD = 'orienta';
+const SERVICE_ROLE_AVAILABLE = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 export async function GET() {
   const supabase = await createClient();
 
@@ -56,7 +59,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const dbData = toSnakeCase(body);
+  if (!SERVICE_ROLE_AVAILABLE) {
+    return NextResponse.json(
+      {
+        error:
+          'Falta configurar SUPABASE_SERVICE_ROLE_KEY para crear cuentas de acceso de terapeutas.',
+      },
+      { status: 503 },
+    );
+  }
+
+  const rawEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+
+  if (!rawEmail) {
+    return NextResponse.json(
+      { error: 'El correo electrónico es obligatorio para crear el acceso del terapeuta.' },
+      { status: 400 },
+    );
+  }
+
+  const adminClient = await createAdminClient();
+
+  const sanitizedBody = {
+    ...body,
+    email: rawEmail,
+  };
+
+  const dbData = toSnakeCase(sanitizedBody);
 
   const { data: therapist, error } = await supabase
     .from('therapists')
@@ -66,6 +95,52 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const { data: createdUser, error: createUserError } = await adminClient.auth.admin.createUser({
+    email: rawEmail,
+    password: DEFAULT_PASSWORD,
+    email_confirm: true,
+    user_metadata: {
+      role: 'therapist',
+      therapist_id: therapist.id,
+      must_change_password: true,
+    },
+  });
+
+  if (createUserError || !createdUser?.user) {
+    await supabase.from('therapists').delete().eq('id', therapist.id);
+    return NextResponse.json(
+      { error: createUserError?.message ?? 'No se pudo crear el usuario del terapeuta.' },
+      { status: createUserError?.status === 422 ? 409 : 500 },
+    );
+  }
+
+  const authUser = createdUser.user;
+
+  const { error: upsertError } = await adminClient
+    .from('users')
+    .upsert(
+      {
+        id: authUser.id,
+        email: authUser.email,
+        therapist_id: therapist.id,
+        role: 'therapist',
+        must_change_password: true,
+      },
+      { onConflict: 'id' },
+    );
+
+  if (upsertError) {
+    try {
+      await adminClient.auth.admin.deleteUser(authUser.id);
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    await supabase.from('therapists').delete().eq('id', therapist.id);
+
+    return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
   return NextResponse.json(toCamelCase(therapist), { status: 201 });

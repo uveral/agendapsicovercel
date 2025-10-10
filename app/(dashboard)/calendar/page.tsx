@@ -198,20 +198,21 @@ function getBusySlotClassNames(status: NormalizedAppointment['status']): string 
 function useHourBlocks(
   workingHours: TherapistWorkingHours[],
   appointments: NormalizedAppointment[],
-  centerOpensAt: string,
-  centerClosesAt: string,
+  opensAt: string,
+  closesAt: string,
 ) {
   return useMemo(() => {
     const hours = new Set<number>();
 
-    const openMinutes = timeToMinutes(centerOpensAt);
-    const closeMinutes = timeToMinutes(centerClosesAt);
+    const openMinutes = timeToMinutes(opensAt);
+    const closeMinutes = timeToMinutes(closesAt);
+    const hasValidRange =
+      Number.isFinite(openMinutes) && Number.isFinite(closeMinutes) && openMinutes < closeMinutes;
+    const rangeStart = hasValidRange ? Math.floor(openMinutes / 60) : null;
+    const rangeEnd = hasValidRange ? Math.ceil(closeMinutes / 60) : null;
 
-    if (Number.isFinite(openMinutes) && Number.isFinite(closeMinutes) && openMinutes < closeMinutes) {
-      const startHour = Math.floor(openMinutes / 60);
-      const endHour = Math.ceil(closeMinutes / 60);
-
-      for (let hour = startHour; hour < endHour; hour += 1) {
+    if (rangeStart !== null && rangeEnd !== null && rangeStart < rangeEnd) {
+      for (let hour = rangeStart; hour < rangeEnd; hour += 1) {
         hours.add(hour);
       }
     }
@@ -238,8 +239,26 @@ function useHourBlocks(
       return [9, 10, 11, 12, 13, 14, 15, 16, 17];
     }
 
-    return Array.from(hours).sort((a, b) => a - b);
-  }, [appointments, centerClosesAt, centerOpensAt, workingHours]);
+    const sorted = Array.from(hours).sort((a, b) => a - b);
+
+    const filtered = sorted.filter((hour) => {
+      if (rangeStart === null || rangeEnd === null) {
+        return true;
+      }
+
+      return hour >= rangeStart && hour < rangeEnd;
+    });
+
+    if (filtered.length > 0) {
+      return filtered;
+    }
+
+    if (sorted.length === 0) {
+      return [9, 10, 11, 12, 13, 14, 15, 16, 17];
+    }
+
+    return sorted;
+  }, [appointments, closesAt, opensAt, workingHours]);
 }
 
 function getTherapistSlots(
@@ -775,11 +794,17 @@ export default function CalendarPage() {
   );
 
   const workingHoursMap = useMemo(() => groupWorkingHours(workingHours), [workingHours]);
-  const hourBlocks = useHourBlocks(
+  const personalHourBlocks = useHourBlocks(
     workingHours,
     appointments,
     settings.centerOpensAt,
     settings.centerClosesAt,
+  );
+  const globalHourBlocks = useHourBlocks(
+    workingHours,
+    appointments,
+    settings.appointmentOpensAt,
+    settings.appointmentClosesAt,
   );
 
   const baseTherapists: TherapistOption[] = useMemo(() => {
@@ -1156,7 +1181,7 @@ export default function CalendarPage() {
                         currentMonth={currentMonth}
                         monthGrid={monthGrid}
                         dayLabels={dayLabels}
-                        hourBlocks={hourBlocks}
+                        hourBlocks={personalHourBlocks}
                         workingHours={workingHoursMap}
                         openOnSaturday={settings.openOnSaturday}
                         openOnSunday={settings.openOnSunday}
@@ -1190,7 +1215,7 @@ export default function CalendarPage() {
                       currentMonth={currentMonth}
                       monthGrid={monthGrid}
                       dayLabels={dayLabels}
-                      hourBlocks={hourBlocks}
+                      hourBlocks={personalHourBlocks}
                       workingHours={workingHoursMap}
                       openOnSaturday={settings.openOnSaturday}
                       openOnSunday={settings.openOnSunday}
@@ -1245,7 +1270,7 @@ export default function CalendarPage() {
                               key={format(day, 'yyyy-MM-dd')}
                               day={day}
                               therapists={visibleTherapists}
-                              hourBlocks={hourBlocks}
+                              hourBlocks={globalHourBlocks}
                               workingHours={workingHoursMap}
                               appointments={appointmentsByTherapist}
                               isCurrentMonth={isSameMonth(day, currentMonth)}

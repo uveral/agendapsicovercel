@@ -45,7 +45,10 @@ function ChangePasswordForm() {
 
     const result = await processPasswordChange(password, confirmPassword, {
       updateUserPassword: async (newPassword) => {
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        const { error } = await supabase.auth.updateUser({
+          password: newPassword,
+          data: { must_change_password: false },
+        });
         return { error: error ?? null };
       },
       markPasswordAsChanged: async () => {
