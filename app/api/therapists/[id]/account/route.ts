@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 const DEFAULT_PASSWORD = 'orienta';
 const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
 const ADMIN_EMAILS = new Set(
@@ -143,7 +145,20 @@ export async function PATCH(
     );
   }
 
-  const adminClient = await createAdminClient();
+  let adminClient: AdminClient;
+  try {
+    adminClient = createAdminClient();
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo inicializar el cliente de servicio de Supabase.',
+      },
+      { status: 503 },
+    );
+  }
 
   const {
     data: { user: authUser },

@@ -36,7 +36,7 @@ export async function PATCH(request: Request) {
   // Try to mirror the flag in auth metadata when service role credentials are available
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
-      const adminClient = await createAdminClient();
+      const adminClient = createAdminClient();
       await adminClient.auth.admin.updateUserById(user.id, {
         user_metadata: { [DEFAULT_PASSWORD_FLAG_FIELD]: mustChangePassword },
       });

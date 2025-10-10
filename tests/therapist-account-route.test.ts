@@ -128,7 +128,7 @@ describe('therapist account route', () => {
       loaded: true,
       exports: {
         createClient: async () => supabase,
-        createAdminClient: async () => adminClient,
+        createAdminClient: () => adminClient,
       },
       children: [],
       paths: [],

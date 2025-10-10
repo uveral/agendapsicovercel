@@ -1,4 +1,5 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/supabase';
 import { NextResponse } from 'next/server';
 
 function toCamelCase<T = unknown>(obj: T): T {
@@ -31,7 +32,6 @@ function toSnakeCase<T = unknown>(obj: T): T {
 }
 
 const DEFAULT_PASSWORD = 'orienta';
-const SERVICE_ROLE_AVAILABLE = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export async function GET() {
   const supabase = await createClient();
@@ -48,6 +48,8 @@ export async function GET() {
   return NextResponse.json(toCamelCase(therapists));
 }
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const body = await request.json();
@@ -59,7 +61,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!SERVICE_ROLE_AVAILABLE) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json(
       {
         error:
@@ -78,7 +80,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const adminClient = await createAdminClient();
+  let adminClient: AdminClient;
+  try {
+    adminClient = createAdminClient();
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo inicializar el cliente de servicio de Supabase.',
+      },
+      { status: 503 },
+    );
+  }
 
   const sanitizedBody = {
     ...body,
@@ -118,18 +133,24 @@ export async function POST(request: Request) {
 
   const authUser = createdUser.user;
 
-  const { error: upsertError } = await adminClient
+  const userRecord: Database['public']['Tables']['users']['Insert'] = {
+    id: authUser.id,
+    email: authUser.email,
+    therapist_id: therapist.id,
+    role: 'therapist',
+    must_change_password: true,
+  };
+
+  const { error: upsertError } = await (adminClient as unknown as {
+    from: (table: 'users') => {
+      upsert: (
+        values: Database['public']['Tables']['users']['Insert'],
+        options: { onConflict: string },
+      ) => Promise<{ error: { message: string } | null }>;
+    };
+  })
     .from('users')
-    .upsert(
-      {
-        id: authUser.id,
-        email: authUser.email,
-        therapist_id: therapist.id,
-        role: 'therapist',
-        must_change_password: true,
-      },
-      { onConflict: 'id' },
-    );
+    .upsert(userRecord, { onConflict: 'id' });
 
   if (upsertError) {
     try {
