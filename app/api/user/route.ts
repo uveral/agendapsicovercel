@@ -87,7 +87,7 @@ export async function GET() {
         email: authUser.email,
         role: fallbackRole,
         therapistId: therapistIdMeta,
-        mustChangePassword: null,
+        mustChangePassword: false,
       }),
     );
   }
@@ -105,7 +105,7 @@ export async function GET() {
   }
 
   if (!('must_change_password' in mergedProfile)) {
-    mergedProfile.must_change_password = null;
+    mergedProfile.must_change_password = false;
   }
 
   // Merge auth user with profile
