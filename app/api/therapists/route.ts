@@ -1,5 +1,6 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
+import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 type UserAccountSummary = Pick<
@@ -37,6 +38,63 @@ function toSnakeCase<T = unknown>(obj: T): T {
 }
 
 const DEFAULT_PASSWORD = 'orienta';
+
+async function fetchAuthUserByEmail(email: string): Promise<SupabaseAuthUser | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      'Falta configurar SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_URL para gestionar cuentas de terapeutas.',
+    );
+  }
+
+  const url = new URL('/auth/v1/admin/users', supabaseUrl);
+  url.searchParams.set('email', email);
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+    cache: 'no-store',
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const payloadText = await response.text();
+
+  if (!response.ok) {
+    let message = 'No se pudo consultar el estado del usuario en Supabase.';
+    try {
+      const parsed = payloadText ? (JSON.parse(payloadText) as Record<string, unknown>) : null;
+      const errorMessage = parsed?.error_description ?? parsed?.error ?? parsed?.message;
+      if (typeof errorMessage === 'string' && errorMessage.trim().length > 0) {
+        message = errorMessage;
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  if (!payloadText) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(payloadText) as { users?: SupabaseAuthUser[] };
+    return payload?.users?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET() {
   const supabase = await createClient();
@@ -105,6 +163,45 @@ export async function POST(request: Request) {
     email: rawEmail,
   };
 
+  let existingAuthUser: SupabaseAuthUser | null = null;
+
+  try {
+    existingAuthUser = await fetchAuthUserByEmail(rawEmail);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo comprobar si el correo ya existe en Supabase.',
+      },
+      { status: 500 },
+    );
+  }
+
+  if (existingAuthUser) {
+    const linkedTherapistId = (() => {
+      const metadata = (existingAuthUser.user_metadata ?? {}) as Record<string, unknown>;
+      const therapistId = metadata.therapist_id;
+      return typeof therapistId === 'string' && therapistId.length > 0 ? therapistId : null;
+    })();
+    const existingRole = (() => {
+      const metadata = (existingAuthUser.user_metadata ?? {}) as Record<string, unknown>;
+      const role = metadata.role;
+      return typeof role === 'string' ? role : null;
+    })();
+
+    if (linkedTherapistId || (existingRole && existingRole !== 'client')) {
+      return NextResponse.json(
+        {
+          error:
+            'Este correo ya está vinculado a otro usuario del sistema. Utiliza una dirección diferente o elimina primero la cuenta existente.',
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const { data: existingAccountRows, error: existingAccountError } = await adminClient
     .from('users')
     .select('id, therapist_id, role')
@@ -140,56 +237,104 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { data: createdUser, error: createUserError } = await adminClient.auth.admin.createUser({
-    email: rawEmail,
-    password: DEFAULT_PASSWORD,
-    email_confirm: true,
-    user_metadata: {
-      role: 'therapist',
-      therapist_id: therapist.id,
-      must_change_password: true,
-    },
-  });
+  let authUser: SupabaseAuthUser | null = existingAuthUser;
+  let createdNewAuthUser = false;
 
-  if (createUserError || !createdUser?.user) {
+  if (!authUser) {
+    const { data: createdUser, error: createUserError } = await adminClient.auth.admin.createUser({
+      email: rawEmail,
+      password: DEFAULT_PASSWORD,
+      email_confirm: true,
+      user_metadata: {
+        role: 'therapist',
+        therapist_id: therapist.id,
+        must_change_password: true,
+      },
+    });
+
+    if (createUserError || !createdUser?.user) {
+      await supabase.from('therapists').delete().eq('id', therapist.id);
+      return NextResponse.json(
+        { error: createUserError?.message ?? 'No se pudo crear el usuario del terapeuta.' },
+        { status: createUserError?.status === 422 ? 409 : 500 },
+      );
+    }
+
+    authUser = createdUser.user;
+    createdNewAuthUser = true;
+  }
+
+  if (!authUser) {
     await supabase.from('therapists').delete().eq('id', therapist.id);
     return NextResponse.json(
-      { error: createUserError?.message ?? 'No se pudo crear el usuario del terapeuta.' },
-      { status: createUserError?.status === 422 ? 409 : 500 },
+      { error: 'No se pudo preparar la cuenta del terapeuta. Inténtalo de nuevo más tarde.' },
+      { status: 500 },
     );
   }
 
-  const authUser = createdUser.user;
-
   const userRecord: Database['public']['Tables']['users']['Insert'] = {
     id: authUser.id,
-    email: authUser.email,
+    email: authUser.email ?? rawEmail,
     therapist_id: therapist.id,
     role: 'therapist',
     must_change_password: true,
   };
 
-  const { error: upsertError } = await (adminClient as unknown as {
-    from: (table: 'users') => {
-      upsert: (
-        values: Database['public']['Tables']['users']['Insert'],
-        options: { onConflict: string },
-      ) => Promise<{ error: { message: string } | null }>;
-    };
-  })
-    .from('users')
-    .upsert(userRecord, { onConflict: 'id' });
+  const adminUsersTable = adminClient.from('users');
+
+  const { error: upsertError } = await (adminUsersTable as unknown as {
+    upsert: (
+      values:
+        | Database['public']['Tables']['users']['Insert']
+        | Database['public']['Tables']['users']['Insert'][],
+      options?: { onConflict?: string },
+    ) => Promise<{ error: { message: string } | null }>;
+  }).upsert(userRecord, { onConflict: 'id' });
 
   if (upsertError) {
-    try {
-      await adminClient.auth.admin.deleteUser(authUser.id);
-    } catch {
-      // Ignore cleanup errors
+    if (createdNewAuthUser) {
+      try {
+        await adminClient.auth.admin.deleteUser(authUser.id);
+      } catch {
+        // Ignore cleanup errors
+      }
     }
 
     await supabase.from('therapists').delete().eq('id', therapist.id);
 
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
+  }
+
+  if (!createdNewAuthUser) {
+    const currentMetadata = (authUser.user_metadata ?? {}) as Record<string, unknown>;
+    const updatedMetadata = {
+      ...currentMetadata,
+      role: 'therapist',
+      therapist_id: therapist.id,
+      must_change_password: true,
+    };
+
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(authUser.id, {
+      password: DEFAULT_PASSWORD,
+      email_confirm: true,
+      user_metadata: updatedMetadata,
+    });
+
+    if (updateError) {
+      await supabase.from('therapists').delete().eq('id', therapist.id);
+      await (adminUsersTable as unknown as {
+        delete: () => {
+          eq: (column: string, value: string) => Promise<{ error: { message: string } | null }>;
+        };
+      })
+        .delete()
+        .eq('id', authUser.id);
+
+      return NextResponse.json(
+        { error: updateError.message ?? 'No se pudo actualizar la cuenta del terapeuta existente.' },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json(toCamelCase(therapist), { status: 201 });
