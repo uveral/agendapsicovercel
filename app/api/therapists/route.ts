@@ -2,6 +2,11 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
 import { NextResponse } from 'next/server';
 
+type UserAccountSummary = Pick<
+  Database['public']['Tables']['users']['Row'],
+  'id' | 'therapist_id' | 'role'
+>;
+
 function toCamelCase<T = unknown>(obj: T): T {
   if (Array.isArray(obj)) {
     return obj.map(toCamelCase) as T;
@@ -99,6 +104,29 @@ export async function POST(request: Request) {
     ...body,
     email: rawEmail,
   };
+
+  const { data: existingAccountRows, error: existingAccountError } = await adminClient
+    .from('users')
+    .select('id, therapist_id, role')
+    .eq('email', rawEmail)
+    .limit(1);
+
+  if (existingAccountError) {
+    return NextResponse.json(
+      { error: existingAccountError.message ?? 'No se pudo comprobar si el correo ya está en uso.' },
+      { status: 500 },
+    );
+  }
+
+  const existingAccount = (existingAccountRows?.[0] ?? null) as UserAccountSummary | null;
+
+  if (existingAccount) {
+    const message = existingAccount.therapist_id
+      ? 'Este correo ya está vinculado a otro terapeuta. Utiliza una dirección diferente.'
+      : 'Este correo ya pertenece a otro usuario. Utiliza una dirección diferente.';
+
+    return NextResponse.json({ error: message }, { status: 409 });
+  }
 
   const dbData = toSnakeCase(sanitizedBody);
 
