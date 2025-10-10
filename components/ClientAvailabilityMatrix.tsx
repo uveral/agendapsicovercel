@@ -269,7 +269,6 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
 
       setDragState({ active: true, shouldSelect });
       applyCellSelection(day, hour, shouldSelect);
-      event.currentTarget.setPointerCapture?.(event.pointerId);
     },
     [applyCellSelection, selectedCells],
   );
@@ -286,13 +285,19 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
     [applyCellSelection, dragState],
   );
 
-  const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+  const handlePointerUp = useCallback(() => {
     if (!dragState?.active) {
       return;
     }
 
-    event.preventDefault();
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    setDragState(null);
+  }, [dragState]);
+
+  const handlePointerCancel = useCallback(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
     setDragState(null);
   }, [dragState]);
 
@@ -410,6 +415,7 @@ export default function ClientAvailabilityMatrix({ open, clientId, onClose }: Cl
                           onPointerDown={handlePointerDown(day.value, hour)}
                           onPointerEnter={handlePointerEnter(day.value, hour)}
                           onPointerUp={handlePointerUp}
+                          onPointerCancel={handlePointerCancel}
                           onKeyDown={(event) => {
                             if (event.key === " " || event.key === "Enter") {
                               event.preventDefault();

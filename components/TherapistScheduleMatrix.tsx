@@ -19,6 +19,7 @@ import { buildDayOptions, buildHourRange, deriveCenterHourBounds } from '@/lib/t
 interface TherapistScheduleMatrixProps {
   therapistId: string;
   canEdit?: boolean;
+  onSaveSuccess?: () => void;
 }
 
 type DragState = { active: boolean; shouldSelect: boolean } | null;
@@ -36,6 +37,7 @@ function serializeCells(cells: Set<string>): string {
 export function TherapistScheduleMatrix({
   therapistId,
   canEdit = false,
+  onSaveSuccess,
 }: TherapistScheduleMatrixProps) {
   const { toast } = useToast();
   const settings = useAppSettingsValue();
@@ -255,7 +257,6 @@ export function TherapistScheduleMatrix({
 
       setDragState({ active: true, shouldSelect });
       applyCellSelection(day, hour, shouldSelect);
-      event.currentTarget.setPointerCapture?.(event.pointerId);
     },
     [applyCellSelection, canEdit, selectedCells],
   );
@@ -272,13 +273,19 @@ export function TherapistScheduleMatrix({
     [applyCellSelection, dragState],
   );
 
-  const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+  const handlePointerUp = useCallback(() => {
     if (!dragState?.active) {
       return;
     }
 
-    event.preventDefault();
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    setDragState(null);
+  }, [dragState]);
+
+  const handlePointerCancel = useCallback(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
     setDragState(null);
   }, [dragState]);
 
@@ -314,6 +321,7 @@ export function TherapistScheduleMatrix({
         title: 'Horario actualizado',
         description: 'Los bloques de trabajo se guardaron correctamente.',
       });
+      onSaveSuccess?.();
     },
     onError: (mutationError: Error) => {
       toast({
@@ -434,6 +442,7 @@ export function TherapistScheduleMatrix({
                           onPointerDown={handlePointerDown(day.value, hour)}
                           onPointerEnter={handlePointerEnter(day.value, hour)}
                           onPointerUp={handlePointerUp}
+                          onPointerCancel={handlePointerCancel}
                           onKeyDown={(event) => {
                             if (!canEdit) {
                               return;

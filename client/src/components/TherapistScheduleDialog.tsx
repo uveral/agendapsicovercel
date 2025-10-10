@@ -213,13 +213,16 @@ export function TherapistScheduleDialog({
 
   const handlePointerDown = useCallback(
     (day: number, hour: number) => (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
       event.preventDefault();
       const key = `${day}-${hour}`;
       const shouldSelect = !selectedCells.has(key);
 
       setDragState({ active: true, shouldSelect });
       applyCellSelection(day, hour, shouldSelect);
-      event.currentTarget.setPointerCapture?.(event.pointerId);
     },
     [applyCellSelection, selectedCells],
   );
@@ -236,18 +239,21 @@ export function TherapistScheduleDialog({
     [applyCellSelection, dragState],
   );
 
-  const handlePointerUp = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (!dragState?.active) {
-        return;
-      }
+  const handlePointerUp = useCallback(() => {
+    if (!dragState?.active) {
+      return;
+    }
 
-      event.preventDefault();
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-      setDragState(null);
-    },
-    [dragState],
-  );
+    setDragState(null);
+  }, [dragState]);
+
+  const handlePointerCancel = useCallback(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
+    setDragState(null);
+  }, [dragState]);
 
   const resetSelection = useCallback(() => {
     rebuildSelectionFromSchedule(existingSchedule);
@@ -382,9 +388,10 @@ export function TherapistScheduleDialog({
                           <button
                             key={key}
                             type="button"
-                            onPointerDown={handlePointerDown(day.value, hour)}
-                            onPointerEnter={handlePointerEnter(day.value, hour)}
-                            onPointerUp={handlePointerUp}
+                          onPointerDown={handlePointerDown(day.value, hour)}
+                          onPointerEnter={handlePointerEnter(day.value, hour)}
+                          onPointerUp={handlePointerUp}
+                          onPointerCancel={handlePointerCancel}
                             onKeyDown={(event) => {
                               if (event.key === " " || event.key === "Enter") {
                                 event.preventDefault();
