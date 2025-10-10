@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "outDir": ".test-dist",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@/components/*": ["./components/*"],
+      "@/lib/*": ["./lib/*"],
+      "@/app/*": ["./app/*"],
+      "@/types/*": ["./types/*"]
+    }
+  },
+  "include": [
+    "lib/therapist-stats.ts",
+    "lib/auth/password-change.ts",
+    "lib/auth/password-reset.ts",
+    "app/api/therapists/[id]/account/route.ts",
+    "tests/**/*.ts"
+  ]
+}

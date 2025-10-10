@@ -40,3 +40,5 @@ next-env.d.ts
 server/public
 vite.config.ts.*
 Trace-*.json
+
+.test-dist/

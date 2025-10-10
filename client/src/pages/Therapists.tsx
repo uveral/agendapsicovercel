@@ -44,54 +44,7 @@ import { insertTherapistSchema, type InsertTherapist } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Therapist, Appointment, TherapistWorkingHours } from "@shared/schema";
-
-const calculateWeeklyAvailability = (
-  appointments: Appointment[],
-  schedule: TherapistWorkingHours[]
-): number => {
-  // Calculate available hours per week
-  let availableHours = 0;
-  for (const block of schedule) {
-    const startHour = parseInt(block.startTime.split(':')[0]);
-    const startMin = parseInt(block.startTime.split(':')[1]);
-    const endHour = parseInt(block.endTime.split(':')[0]);
-    const endMin = parseInt(block.endTime.split(':')[1]);
-    
-    const durationHours = (endHour * 60 + endMin - startHour * 60 - startMin) / 60;
-    availableHours += durationHours;
-  }
-  
-  if (availableHours === 0) return 0;
-  
-  // Get current week bounds (Monday to Sunday)
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ...
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() + mondayOffset);
-  weekStart.setHours(0, 0, 0, 0);
-  
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
-  
-  // Calculate occupied hours this week
-  const thisWeekAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.date);
-    return aptDate >= weekStart && aptDate <= weekEnd && apt.status !== "cancelled";
-  });
-  
-  let occupiedHours = 0;
-  for (const apt of thisWeekAppointments) {
-    occupiedHours += (apt.durationMinutes || 60) / 60;
-  }
-  
-  // Calculate percentage
-  const occupancyRate = (occupiedHours / availableHours) * 100;
-  const availability = Math.max(0, Math.min(100, Math.round(100 - occupancyRate)));
-  
-  return availability;
-};
+import { calculateWeeklyStats } from "@/lib/therapist-stats";
 
 export default function Therapists() {
   const [, setLocation] = useLocation();
@@ -187,14 +140,15 @@ export default function Therapists() {
     );
 
     // Calculate weekly availability based on working hours and appointments
-    const availability = calculateWeeklyAvailability(
+    const { availability, occupancy } = calculateWeeklyStats(
       therapistAppointments,
-      therapistSchedule
+      therapistSchedule,
     );
 
     return {
       ...therapist,
       availability,
+      occupancy,
       upcomingAppointments,
     };
   });
