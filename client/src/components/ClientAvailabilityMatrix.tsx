@@ -53,15 +53,26 @@ export default function ClientAvailabilityMatrix({
   const [initialSnapshot, setInitialSnapshot] = useState<string>("");
 
   const hourBounds = useMemo(
-    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
-    [settings.centerClosesAt, settings.centerOpensAt],
+    () =>
+      deriveCenterHourBounds({
+        appointmentOpensAt: settings.appointmentOpensAt,
+        appointmentClosesAt: settings.appointmentClosesAt,
+        workOpensAt: settings.centerOpensAt,
+        workClosesAt: settings.centerClosesAt,
+      }),
+    [
+      settings.appointmentClosesAt,
+      settings.appointmentOpensAt,
+      settings.centerClosesAt,
+      settings.centerOpensAt,
+    ],
   );
 
-  const { openingHour, clientClosingExclusive } = hourBounds;
+  const { appointmentOpeningHour, appointmentClosingExclusive } = hourBounds;
 
   const hours = useMemo(
-    () => buildHourRange(openingHour, clientClosingExclusive),
-    [clientClosingExclusive, openingHour],
+    () => buildHourRange(appointmentOpeningHour, appointmentClosingExclusive),
+    [appointmentClosingExclusive, appointmentOpeningHour],
   );
 
   const dayOptions = useMemo(
@@ -97,11 +108,14 @@ export default function ClientAvailabilityMatrix({
           return;
         }
 
-        const normalizedStart = Math.max(openingHour, startHour as number);
-        const normalizedEnd = Math.min(clientClosingExclusive, Math.max(normalizedStart, endHour as number));
+        const normalizedStart = Math.max(appointmentOpeningHour, startHour as number);
+        const normalizedEnd = Math.min(
+          appointmentClosingExclusive,
+          Math.max(normalizedStart, endHour as number),
+        );
 
         for (let hour = normalizedStart; hour < normalizedEnd; hour++) {
-          if (hour >= openingHour && hour < clientClosingExclusive) {
+          if (hour >= appointmentOpeningHour && hour < appointmentClosingExclusive) {
             cells.add(`${slot.dayOfWeek}-${hour}`);
           }
         }
@@ -110,7 +124,7 @@ export default function ClientAvailabilityMatrix({
       setSelectedCells(cells);
       setInitialSnapshot(serializeCells(cells));
     },
-    [allowedDayValues, clientClosingExclusive, openingHour],
+    [allowedDayValues, appointmentClosingExclusive, appointmentOpeningHour],
   );
 
   useEffect(() => {
@@ -134,8 +148,8 @@ export default function ClientAvailabilityMatrix({
         if (
           allowedDayValues.has(dayValue) &&
           Number.isFinite(hourValue) &&
-          hourValue >= openingHour &&
-          hourValue < clientClosingExclusive
+          hourValue >= appointmentOpeningHour &&
+          hourValue < appointmentClosingExclusive
         ) {
           filtered.add(key);
         } else {
@@ -149,7 +163,7 @@ export default function ClientAvailabilityMatrix({
 
       return filtered;
     });
-  }, [allowedDayValues, clientClosingExclusive, openingHour]);
+  }, [allowedDayValues, appointmentClosingExclusive, appointmentOpeningHour]);
 
   useEffect(() => {
     if (!dragState?.active) {
@@ -169,7 +183,11 @@ export default function ClientAvailabilityMatrix({
 
   const applyCellSelection = useCallback(
     (day: number, hour: number, shouldSelect: boolean) => {
-      if (!allowedDayValues.has(day) || hour < openingHour || hour >= clientClosingExclusive) {
+      if (
+        !allowedDayValues.has(day) ||
+        hour < appointmentOpeningHour ||
+        hour >= appointmentClosingExclusive
+      ) {
         return;
       }
 
@@ -186,7 +204,7 @@ export default function ClientAvailabilityMatrix({
         return next;
       });
     },
-    [allowedDayValues, clientClosingExclusive, openingHour],
+    [allowedDayValues, appointmentClosingExclusive, appointmentOpeningHour],
   );
 
   const toggleCell = useCallback(
@@ -288,9 +306,9 @@ export default function ClientAvailabilityMatrix({
     dayOptions.forEach((day) => {
       let blockStart: number | null = null;
 
-      for (let hour = openingHour; hour <= clientClosingExclusive; hour++) {
+      for (let hour = appointmentOpeningHour; hour <= appointmentClosingExclusive; hour++) {
         const isSelected =
-          hour < clientClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
+          hour < appointmentClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
@@ -308,7 +326,7 @@ export default function ClientAvailabilityMatrix({
         blocks.push({
           dayOfWeek: day.value,
           startTime: `${blockStart.toString().padStart(2, "0")}:00`,
-          endTime: `${clientClosingExclusive.toString().padStart(2, "0")}:00`,
+          endTime: `${appointmentClosingExclusive.toString().padStart(2, "0")}:00`,
         });
       }
     });

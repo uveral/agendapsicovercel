@@ -45,15 +45,26 @@ export function TherapistScheduleMatrix({
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   const hourBounds = useMemo(
-    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
-    [settings.centerClosesAt, settings.centerOpensAt],
+    () =>
+      deriveCenterHourBounds({
+        appointmentOpensAt: settings.appointmentOpensAt,
+        appointmentClosesAt: settings.appointmentClosesAt,
+        workOpensAt: settings.centerOpensAt,
+        workClosesAt: settings.centerClosesAt,
+      }),
+    [
+      settings.appointmentClosesAt,
+      settings.appointmentOpensAt,
+      settings.centerClosesAt,
+      settings.centerOpensAt,
+    ],
   );
 
-  const { openingHour, therapistClosingExclusive, centerClosingExclusive } = hourBounds;
+  const { workOpeningHour, workClosingExclusive } = hourBounds;
 
   const hours = useMemo(
-    () => buildHourRange(openingHour, therapistClosingExclusive),
-    [openingHour, therapistClosingExclusive],
+    () => buildHourRange(workOpeningHour, workClosingExclusive),
+    [workClosingExclusive, workOpeningHour],
   );
 
   const dayOptions = useMemo(
@@ -129,20 +140,18 @@ export function TherapistScheduleMatrix({
         return;
       }
 
-      const safeStart = Math.max(openingHour, slot.startHour);
-      const shouldExtendToClosing = slot.endHour >= centerClosingExclusive;
-      const cappedEnd = shouldExtendToClosing ? slot.endHour + 1 : slot.endHour;
-      const safeEnd = Math.min(therapistClosingExclusive, cappedEnd);
+      const safeStart = Math.max(workOpeningHour, slot.startHour);
+      const safeEnd = Math.min(workClosingExclusive, slot.endHour);
 
       for (let hour = safeStart; hour < safeEnd; hour++) {
-        if (hour >= openingHour && hour < therapistClosingExclusive) {
+        if (hour >= workOpeningHour && hour < workClosingExclusive) {
           cells.add(`${slot.dayOfWeek}-${hour}`);
         }
       }
     });
 
     return cells;
-  }, [allowedDayValues, centerClosingExclusive, normalizedSchedule, openingHour, therapistClosingExclusive]);
+  }, [allowedDayValues, normalizedSchedule, workClosingExclusive, workOpeningHour]);
 
   useEffect(() => {
     if (hydratedKey === scheduleKey) {
@@ -169,8 +178,8 @@ export function TherapistScheduleMatrix({
         if (
           allowedDayValues.has(dayValue) &&
           Number.isFinite(hourValue) &&
-          hourValue >= openingHour &&
-          hourValue < therapistClosingExclusive
+          hourValue >= workOpeningHour &&
+          hourValue < workClosingExclusive
         ) {
           filtered.add(key);
         } else {
@@ -184,7 +193,7 @@ export function TherapistScheduleMatrix({
 
       return filtered;
     });
-  }, [allowedDayValues, openingHour, therapistClosingExclusive]);
+  }, [allowedDayValues, workClosingExclusive, workOpeningHour]);
 
   const applyCellSelection = useCallback(
     (day: number, hour: number, shouldSelect: boolean) => {
@@ -192,7 +201,7 @@ export function TherapistScheduleMatrix({
         return;
       }
 
-      if (!allowedDayValues.has(day) || hour < openingHour || hour >= therapistClosingExclusive) {
+      if (!allowedDayValues.has(day) || hour < workOpeningHour || hour >= workClosingExclusive) {
         return;
       }
 
@@ -217,7 +226,7 @@ export function TherapistScheduleMatrix({
         return next;
       });
     },
-    [allowedDayValues, canEdit, openingHour, therapistClosingExclusive],
+    [allowedDayValues, canEdit, workClosingExclusive, workOpeningHour],
   );
 
   const toggleCell = useCallback(
@@ -325,14 +334,14 @@ export function TherapistScheduleMatrix({
     dayOptions.forEach((day) => {
       let blockStart: number | null = null;
 
-      for (let hour = openingHour; hour <= therapistClosingExclusive; hour++) {
+      for (let hour = workOpeningHour; hour <= workClosingExclusive; hour++) {
         const isSelected =
-          hour < therapistClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
+          hour < workClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
         } else if (!isSelected && blockStart !== null) {
-          const cappedEnd = Math.min(hour, centerClosingExclusive);
+          const cappedEnd = Math.min(hour, workClosingExclusive);
           if (cappedEnd > blockStart) {
             blocks.push({
               dayOfWeek: day.value,
@@ -345,7 +354,7 @@ export function TherapistScheduleMatrix({
       }
 
       if (blockStart !== null) {
-        const finalEnd = Math.min(therapistClosingExclusive, centerClosingExclusive);
+        const finalEnd = workClosingExclusive;
         if (finalEnd > blockStart) {
           blocks.push({
             dayOfWeek: day.value,

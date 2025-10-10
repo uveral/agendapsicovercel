@@ -250,8 +250,10 @@ function getTherapistSlots(
   appointments: AppointmentsByTherapist,
   openOnSaturday: boolean,
   openOnSunday: boolean,
-  centerOpenMinutes: number,
-  centerCloseMinutes: number,
+  workOpenMinutes: number,
+  workCloseMinutes: number,
+  appointmentOpenMinutes: number,
+  appointmentCloseMinutes: number,
 ): SlotStatus {
   const isoDate = format(date, 'yyyy-MM-dd');
   const dayOfWeek = getDay(date);
@@ -261,12 +263,12 @@ function getTherapistSlots(
   }
 
   if (
-    Number.isFinite(centerOpenMinutes) &&
-    Number.isFinite(centerCloseMinutes) &&
-    centerOpenMinutes < centerCloseMinutes
+    Number.isFinite(workOpenMinutes) &&
+    Number.isFinite(workCloseMinutes) &&
+    workOpenMinutes < workCloseMinutes
   ) {
     const hourStart = hour * 60;
-    if (hourStart < centerOpenMinutes || hourStart >= centerCloseMinutes) {
+    if (hourStart < workOpenMinutes || hourStart >= workCloseMinutes) {
       return 'off';
     }
   }
@@ -284,15 +286,30 @@ function getTherapistSlots(
     return 'off';
   }
 
+  const hourStartMinutes = hour * 60;
+
   const therapistAppointments = appointments.get(therapistId)?.get(isoDate) ?? [];
   const occupied = therapistAppointments.some((appointment) => {
     const startMinutes = timeToMinutes(appointment.startTime);
     const endMinutes = timeToMinutes(appointment.endTime);
-    const hourMinutes = hour * 60;
-    return hourMinutes >= startMinutes && hourMinutes < endMinutes;
+    return hourStartMinutes >= startMinutes && hourStartMinutes < endMinutes;
   });
 
-  return occupied ? 'busy' : 'free';
+  if (occupied) {
+    return 'busy';
+  }
+
+  if (
+    Number.isFinite(appointmentOpenMinutes) &&
+    Number.isFinite(appointmentCloseMinutes) &&
+    appointmentOpenMinutes < appointmentCloseMinutes
+  ) {
+    if (hourStartMinutes < appointmentOpenMinutes || hourStartMinutes >= appointmentCloseMinutes) {
+      return 'off';
+    }
+  }
+
+  return 'free';
 }
 
 function GlobalDayCell({
@@ -306,6 +323,8 @@ function GlobalDayCell({
   openOnSunday,
   centerOpenMinutes,
   centerCloseMinutes,
+  appointmentOpenMinutes,
+  appointmentCloseMinutes,
   onSlotClick,
 }: {
   day: Date;
@@ -318,6 +337,8 @@ function GlobalDayCell({
   openOnSunday: boolean;
   centerOpenMinutes: number;
   centerCloseMinutes: number;
+  appointmentOpenMinutes: number;
+  appointmentCloseMinutes: number;
   onSlotClick?: (date: Date, hour: number, therapistId: string, status: SlotStatus) => void;
 }) {
   const statusClass = (status: SlotStatus) => {
@@ -368,6 +389,8 @@ function GlobalDayCell({
                   openOnSunday,
                   centerOpenMinutes,
                   centerCloseMinutes,
+                  appointmentOpenMinutes,
+                  appointmentCloseMinutes,
                 );
 
                 return (
@@ -404,6 +427,8 @@ interface TherapistDayCellProps {
   openOnSunday: boolean;
   centerOpenMinutes: number;
   centerCloseMinutes: number;
+  appointmentOpenMinutes: number;
+  appointmentCloseMinutes: number;
   onFreeSlotClick?: (date: Date, hour: number, therapistId: string) => void;
   onBusySlotClick?: (appointment: NormalizedAppointment, therapistId: string, date: Date) => void;
   onAppointmentDragStart?: (appointment: NormalizedAppointment) => void;
@@ -424,6 +449,8 @@ function TherapistDayCell({
   openOnSunday,
   centerOpenMinutes,
   centerCloseMinutes,
+  appointmentOpenMinutes,
+  appointmentCloseMinutes,
   onFreeSlotClick,
   onBusySlotClick,
   onAppointmentDragStart,
@@ -444,6 +471,8 @@ function TherapistDayCell({
       openOnSunday,
       centerOpenMinutes,
       centerCloseMinutes,
+      appointmentOpenMinutes,
+      appointmentCloseMinutes,
     );
     const slotAppointment = dayAppointments.find((appointment) => {
       const startMinutes = timeToMinutes(appointment.startTime);
@@ -580,6 +609,8 @@ interface TherapistMonthCalendarProps {
   openOnSunday: boolean;
   centerOpenMinutes: number;
   centerCloseMinutes: number;
+  appointmentOpenMinutes: number;
+  appointmentCloseMinutes: number;
   onFreeSlotClick?: (date: Date, hour: number, therapistId: string) => void;
   onBusySlotClick?: (appointment: NormalizedAppointment, therapistId: string, date: Date) => void;
   onAppointmentDragStart?: (appointment: NormalizedAppointment) => void;
@@ -601,6 +632,8 @@ function TherapistMonthCalendar({
   openOnSunday,
   centerOpenMinutes,
   centerCloseMinutes,
+  appointmentOpenMinutes,
+  appointmentCloseMinutes,
   onFreeSlotClick,
   onBusySlotClick,
   onAppointmentDragStart,
@@ -647,6 +680,8 @@ function TherapistMonthCalendar({
                     openOnSunday={openOnSunday}
                     centerOpenMinutes={centerOpenMinutes}
                     centerCloseMinutes={centerCloseMinutes}
+                    appointmentOpenMinutes={appointmentOpenMinutes}
+                    appointmentCloseMinutes={appointmentCloseMinutes}
                     onFreeSlotClick={onFreeSlotClick}
                     onBusySlotClick={onBusySlotClick}
                     onAppointmentDragStart={onAppointmentDragStart}
@@ -828,6 +863,8 @@ export default function CalendarPage() {
 
   const centerOpenMinutes = timeToMinutes(settings.centerOpensAt);
   const centerCloseMinutes = timeToMinutes(settings.centerClosesAt);
+  const appointmentOpenMinutes = timeToMinutes(settings.appointmentOpensAt);
+  const appointmentCloseMinutes = timeToMinutes(settings.appointmentClosesAt);
 
   const performAppointmentMove = useCallback(
     async (
@@ -973,6 +1010,8 @@ export default function CalendarPage() {
         settings.openOnSunday,
         centerOpenMinutes,
         centerCloseMinutes,
+        appointmentOpenMinutes,
+        appointmentCloseMinutes,
       );
 
       const therapistData = therapists.find(t => t.id === therapist.id);
@@ -999,7 +1038,19 @@ export default function CalendarPage() {
       // Then by name
       return a.therapist.name.localeCompare(b.therapist.name);
     });
-  }, [selectedSlot, baseTherapists, therapists, workingHoursMap, appointmentsByTherapist, settings.openOnSaturday, settings.openOnSunday, centerOpenMinutes, centerCloseMinutes]);
+  }, [
+    selectedSlot,
+    appointmentCloseMinutes,
+    appointmentOpenMinutes,
+    baseTherapists,
+    therapists,
+    workingHoursMap,
+    appointmentsByTherapist,
+    settings.openOnSaturday,
+    settings.openOnSunday,
+    centerOpenMinutes,
+    centerCloseMinutes,
+  ]);
 
   const isLoading = authLoading || appointmentsLoading || therapistsLoading;
 
@@ -1111,6 +1162,8 @@ export default function CalendarPage() {
                         openOnSunday={settings.openOnSunday}
                         centerOpenMinutes={centerOpenMinutes}
                         centerCloseMinutes={centerCloseMinutes}
+                        appointmentOpenMinutes={appointmentOpenMinutes}
+                        appointmentCloseMinutes={appointmentCloseMinutes}
                         onFreeSlotClick={(date, hour, therapistId) =>
                           handleSlotClick(date, hour, therapistId, 'free')
                         }
@@ -1143,6 +1196,8 @@ export default function CalendarPage() {
                       openOnSunday={settings.openOnSunday}
                       centerOpenMinutes={centerOpenMinutes}
                       centerCloseMinutes={centerCloseMinutes}
+                      appointmentOpenMinutes={appointmentOpenMinutes}
+                      appointmentCloseMinutes={appointmentCloseMinutes}
                       onFreeSlotClick={(date, hour, therapistId) =>
                         handleSlotClick(date, hour, therapistId, 'free')
                       }
@@ -1198,6 +1253,8 @@ export default function CalendarPage() {
                               openOnSunday={settings.openOnSunday}
                               centerOpenMinutes={centerOpenMinutes}
                               centerCloseMinutes={centerCloseMinutes}
+                              appointmentOpenMinutes={appointmentOpenMinutes}
+                              appointmentCloseMinutes={appointmentCloseMinutes}
                               onSlotClick={handleSlotClick}
                             />
                           ))}

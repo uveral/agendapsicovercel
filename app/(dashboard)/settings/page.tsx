@@ -24,6 +24,12 @@ export default function SettingsPage() {
 
   const [openingTime, setOpeningTime] = useState(settings?.centerOpensAt ?? '09:00');
   const [closingTime, setClosingTime] = useState(settings?.centerClosesAt ?? '21:00');
+  const [appointmentOpeningTime, setAppointmentOpeningTime] = useState(
+    settings?.appointmentOpensAt ?? '09:00',
+  );
+  const [appointmentClosingTime, setAppointmentClosingTime] = useState(
+    settings?.appointmentClosesAt ?? '20:00',
+  );
 
   useEffect(() => {
     setOpeningTime(settings?.centerOpensAt ?? '09:00');
@@ -32,6 +38,14 @@ export default function SettingsPage() {
   useEffect(() => {
     setClosingTime(settings?.centerClosesAt ?? '21:00');
   }, [settings?.centerClosesAt]);
+
+  useEffect(() => {
+    setAppointmentOpeningTime(settings?.appointmentOpensAt ?? '09:00');
+  }, [settings?.appointmentOpensAt]);
+
+  useEffect(() => {
+    setAppointmentClosingTime(settings?.appointmentClosesAt ?? '20:00');
+  }, [settings?.appointmentClosesAt]);
 
   useEffect(() => {
     if (!loading && user && user.role !== 'admin') {
@@ -79,7 +93,10 @@ export default function SettingsPage() {
   }, []);
 
   const handleTimeUpdate = useCallback(
-    (key: 'centerOpensAt' | 'centerClosesAt', value: string) => {
+    (
+      key: 'centerOpensAt' | 'centerClosesAt' | 'appointmentOpensAt' | 'appointmentClosesAt',
+      value: string,
+    ) => {
       const sanitized = sanitizeTime(value);
 
       if (!sanitized) {
@@ -90,8 +107,12 @@ export default function SettingsPage() {
         });
         if (key === 'centerOpensAt') {
           setOpeningTime(settings?.centerOpensAt ?? '09:00');
-        } else {
+        } else if (key === 'centerClosesAt') {
           setClosingTime(settings?.centerClosesAt ?? '21:00');
+        } else if (key === 'appointmentOpensAt') {
+          setAppointmentOpeningTime(settings?.appointmentOpensAt ?? '09:00');
+        } else {
+          setAppointmentClosingTime(settings?.appointmentClosesAt ?? '20:00');
         }
         return;
       }
@@ -101,6 +122,17 @@ export default function SettingsPage() {
       }
 
       if (key === 'centerClosesAt' && sanitized === (settings?.centerClosesAt ?? '21:00')) {
+        return;
+      }
+
+      if (key === 'appointmentOpensAt' && sanitized === (settings?.appointmentOpensAt ?? '09:00')) {
+        return;
+      }
+
+      if (
+        key === 'appointmentClosesAt' &&
+        sanitized === (settings?.appointmentClosesAt ?? '20:00')
+      ) {
         return;
       }
 
@@ -115,14 +147,26 @@ export default function SettingsPage() {
             });
             if (key === 'centerOpensAt') {
               setOpeningTime(settings?.centerOpensAt ?? '09:00');
-            } else {
+            } else if (key === 'centerClosesAt') {
               setClosingTime(settings?.centerClosesAt ?? '21:00');
+            } else if (key === 'appointmentOpensAt') {
+              setAppointmentOpeningTime(settings?.appointmentOpensAt ?? '09:00');
+            } else {
+              setAppointmentClosingTime(settings?.appointmentClosesAt ?? '20:00');
             }
           },
         },
       );
     },
-    [sanitizeTime, settings?.centerClosesAt, settings?.centerOpensAt, toast, updateMutation],
+    [
+      sanitizeTime,
+      settings?.appointmentClosesAt,
+      settings?.appointmentOpensAt,
+      settings?.centerClosesAt,
+      settings?.centerOpensAt,
+      toast,
+      updateMutation,
+    ],
   );
 
   const isSaving = updateMutation.isPending;
@@ -221,6 +265,47 @@ export default function SettingsPage() {
                     value={closingTime}
                     onChange={(event) => setClosingTime(event.target.value)}
                     onBlur={() => handleTimeUpdate('centerClosesAt', closingTime)}
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <Label className="text-base">Horario de citas</Label>
+                <p className="text-sm text-muted-foreground">
+                  Los pacientes solo podrán reservar dentro de este rango. El último turno disponible termina una hora antes del cierre laboral.
+                </p>
+              </div>
+              <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-end">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="appointment-opening-time" className="text-xs uppercase text-muted-foreground">
+                    Inicio de citas
+                  </Label>
+                  <Input
+                    id="appointment-opening-time"
+                    type="time"
+                    step={300}
+                    value={appointmentOpeningTime}
+                    onChange={(event) => setAppointmentOpeningTime(event.target.value)}
+                    onBlur={() => handleTimeUpdate('appointmentOpensAt', appointmentOpeningTime)}
+                    disabled={isSaving}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="appointment-closing-time" className="text-xs uppercase text-muted-foreground">
+                    Fin de citas
+                  </Label>
+                  <Input
+                    id="appointment-closing-time"
+                    type="time"
+                    step={300}
+                    value={appointmentClosingTime}
+                    onChange={(event) => setAppointmentClosingTime(event.target.value)}
+                    onBlur={() => handleTimeUpdate('appointmentClosesAt', appointmentClosingTime)}
                     disabled={isSaving}
                   />
                 </div>

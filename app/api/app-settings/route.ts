@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { normalizeScheduleConfig } from '@/lib/time-utils';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -20,6 +21,8 @@ const ADMIN_EMAILS = new Set(
 const SETTINGS_KEYS = {
   centerOpensAt: 'center_open_time',
   centerClosesAt: 'center_close_time',
+  appointmentOpensAt: 'appointment_open_time',
+  appointmentClosesAt: 'appointment_close_time',
   openOnSaturday: 'center_open_saturday',
   openOnSunday: 'center_open_sunday',
   therapistCanViewOthers: 'therapist_can_view_others',
@@ -31,6 +34,8 @@ type SettingKey = keyof typeof SETTINGS_KEYS;
 interface AppSettings {
   centerOpensAt: string;
   centerClosesAt: string;
+  appointmentOpensAt: string;
+  appointmentClosesAt: string;
   openOnSaturday: boolean;
   openOnSunday: boolean;
   therapistCanViewOthers: boolean;
@@ -40,6 +45,8 @@ interface AppSettings {
 const DEFAULT_SETTINGS: AppSettings = {
   centerOpensAt: '09:00',
   centerClosesAt: '21:00',
+  appointmentOpensAt: '09:00',
+  appointmentClosesAt: '20:00',
   openOnSaturday: false,
   openOnSunday: false,
   therapistCanViewOthers: false,
@@ -88,9 +95,35 @@ function mapRowsToSettings(rows: SettingsRow[] | null): AppSettings {
     map.set(row.key, row);
   });
 
+  const workOpensAt = toTime(
+    map.get(SETTINGS_KEYS.centerOpensAt)?.value ?? null,
+    DEFAULT_SETTINGS.centerOpensAt,
+  );
+  const workClosesAt = toTime(
+    map.get(SETTINGS_KEYS.centerClosesAt)?.value ?? null,
+    DEFAULT_SETTINGS.centerClosesAt,
+  );
+  const appointmentOpensAt = toTime(
+    map.get(SETTINGS_KEYS.appointmentOpensAt)?.value ?? null,
+    DEFAULT_SETTINGS.appointmentOpensAt,
+  );
+  const appointmentClosesAt = toTime(
+    map.get(SETTINGS_KEYS.appointmentClosesAt)?.value ?? null,
+    DEFAULT_SETTINGS.appointmentClosesAt,
+  );
+
+  const normalizedSchedule = normalizeScheduleConfig({
+    workOpensAt,
+    workClosesAt,
+    appointmentOpensAt,
+    appointmentClosesAt,
+  });
+
   return {
-    centerOpensAt: toTime(map.get(SETTINGS_KEYS.centerOpensAt)?.value ?? null, DEFAULT_SETTINGS.centerOpensAt),
-    centerClosesAt: toTime(map.get(SETTINGS_KEYS.centerClosesAt)?.value ?? null, DEFAULT_SETTINGS.centerClosesAt),
+    centerOpensAt: normalizedSchedule.workOpensAt,
+    centerClosesAt: normalizedSchedule.workClosesAt,
+    appointmentOpensAt: normalizedSchedule.appointmentOpensAt,
+    appointmentClosesAt: normalizedSchedule.appointmentClosesAt,
     openOnSaturday: toBoolean(
       map.get(SETTINGS_KEYS.openOnSaturday)?.value ?? null,
       DEFAULT_SETTINGS.openOnSaturday,
@@ -216,7 +249,12 @@ export async function PUT(request: Request) {
   const supabase = await createClient();
 
   const upsertPayload = entries.map(([key, value]) => {
-    if (key === 'centerOpensAt' || key === 'centerClosesAt') {
+    if (
+      key === 'centerOpensAt' ||
+      key === 'centerClosesAt' ||
+      key === 'appointmentOpensAt' ||
+      key === 'appointmentClosesAt'
+    ) {
       const normalized = toTime(value, DEFAULT_SETTINGS[key]);
       return { key: SETTINGS_KEYS[key], value: normalized };
     }

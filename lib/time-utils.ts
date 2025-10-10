@@ -1,5 +1,13 @@
 const MINUTES_PER_DAY = 24 * 60;
 
+export function minutesToTime(totalMinutes: number): string {
+  const normalized = ((totalMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
 export function addMinutesToTime(time: string, minutesToAdd: number): string {
   const [hoursPart = '0', minutesPart = '0'] = time.split(':');
   const hours = Number.parseInt(hoursPart, 10);
@@ -56,54 +64,94 @@ export function parseTimeToMinutes(value: unknown, fallbackMinutes: number): num
 }
 
 export interface CenterHourBounds {
-  openingHour: number;
-  clientClosingExclusive: number;
-  therapistClosingExclusive: number;
-  centerClosingExclusive: number;
+  appointmentOpeningHour: number;
+  appointmentClosingExclusive: number;
+  workOpeningHour: number;
+  workClosingExclusive: number;
 }
 
-export function deriveCenterHourBounds(
-  centerOpensAt: string,
-  centerClosesAt: string,
-  options?: {
-    defaultOpeningHour?: number;
-    defaultClosingHour?: number;
-    therapistExtraHours?: number;
-  },
-): CenterHourBounds {
-  const defaultOpeningMinutes = clampMinutes((options?.defaultOpeningHour ?? 9) * 60);
-  const defaultClosingMinutes = clampMinutes((options?.defaultClosingHour ?? 21) * 60);
-  const therapistExtraHours = options?.therapistExtraHours ?? 1;
-  const minimumSpan = 60; // Require at least one working hour
+export interface ScheduleHourConfig {
+  appointmentOpensAt: string;
+  appointmentClosesAt: string;
+  workOpensAt: string;
+  workClosesAt: string;
+}
 
-  const openingMinutes = clampMinutes(parseTimeToMinutes(centerOpensAt, defaultOpeningMinutes));
-  const rawClosingMinutes = clampMinutes(parseTimeToMinutes(centerClosesAt, defaultClosingMinutes));
-  const ensuredClosingMinutes = Math.max(openingMinutes + minimumSpan, rawClosingMinutes);
+export function normalizeScheduleConfig(config: ScheduleHourConfig): ScheduleHourConfig {
+  const defaultOpeningMinutes = clampMinutes(9 * 60);
+  const defaultClosingMinutes = clampMinutes(21 * 60);
 
-  const openingHour = Math.max(0, Math.min(23, Math.floor(openingMinutes / 60)));
-  const centerClosingExclusive = Math.min(
-    24,
-    Math.max(openingHour + 1, Math.ceil(ensuredClosingMinutes / 60)),
+  const workOpenMinutes = clampMinutes(
+    parseTimeToMinutes(config.workOpensAt, defaultOpeningMinutes),
+  );
+  const rawWorkCloseMinutes = clampMinutes(
+    parseTimeToMinutes(config.workClosesAt, defaultClosingMinutes),
+  );
+  const workCloseMinutes = Math.max(workOpenMinutes + 60, rawWorkCloseMinutes);
+
+  const rawAppointmentOpenMinutes = clampMinutes(
+    parseTimeToMinutes(config.appointmentOpensAt, workOpenMinutes),
+  );
+  const rawAppointmentCloseMinutes = clampMinutes(
+    parseTimeToMinutes(config.appointmentClosesAt, Math.max(workOpenMinutes + 60, workCloseMinutes - 60)),
   );
 
-  const bufferedClosingMinutes = Math.max(openingMinutes + minimumSpan, ensuredClosingMinutes - 60);
-  const bufferedClosingHour = Math.floor(bufferedClosingMinutes / 60);
+  let appointmentOpenMinutes = Math.max(workOpenMinutes, rawAppointmentOpenMinutes);
+  let appointmentCloseMinutes = Math.max(appointmentOpenMinutes + 60, rawAppointmentCloseMinutes);
 
-  const clientClosingExclusive = Math.min(
-    centerClosingExclusive,
-    Math.max(openingHour + 1, bufferedClosingHour + 1),
-  );
+  const appointmentCloseLimit = workCloseMinutes - 60;
 
-  const therapistClosingExclusive = Math.min(
-    24,
-    Math.max(centerClosingExclusive, clientClosingExclusive + therapistExtraHours),
+  if (appointmentCloseLimit >= appointmentOpenMinutes + 60) {
+    appointmentCloseMinutes = Math.min(appointmentCloseMinutes, appointmentCloseLimit);
+  } else {
+    appointmentCloseMinutes = Math.min(appointmentCloseMinutes, workCloseMinutes);
+  }
+
+  if (appointmentCloseMinutes < appointmentOpenMinutes + 60) {
+    appointmentCloseMinutes = Math.min(workCloseMinutes, appointmentOpenMinutes + 60);
+  }
+
+  appointmentOpenMinutes = Math.min(
+    appointmentOpenMinutes,
+    Math.max(workOpenMinutes, appointmentCloseMinutes - 60),
   );
 
   return {
-    openingHour,
-    clientClosingExclusive,
-    therapistClosingExclusive,
-    centerClosingExclusive,
+    workOpensAt: minutesToTime(workOpenMinutes),
+    workClosesAt: minutesToTime(workCloseMinutes),
+    appointmentOpensAt: minutesToTime(appointmentOpenMinutes),
+    appointmentClosesAt: minutesToTime(appointmentCloseMinutes),
+  };
+}
+
+export function deriveCenterHourBounds(config: ScheduleHourConfig): CenterHourBounds {
+  const normalized = normalizeScheduleConfig(config);
+
+  const workOpenMinutes = parseTimeToMinutes(normalized.workOpensAt, 9 * 60);
+  const workCloseMinutes = parseTimeToMinutes(normalized.workClosesAt, 21 * 60);
+  const appointmentOpenMinutes = parseTimeToMinutes(normalized.appointmentOpensAt, workOpenMinutes);
+  const appointmentCloseMinutes = parseTimeToMinutes(
+    normalized.appointmentClosesAt,
+    Math.max(appointmentOpenMinutes + 60, workCloseMinutes - 60),
+  );
+
+  const workOpeningHour = Math.max(0, Math.min(23, Math.floor(workOpenMinutes / 60)));
+  const workClosingExclusive = Math.min(24, Math.max(workOpeningHour + 1, Math.ceil(workCloseMinutes / 60)));
+
+  const appointmentOpeningHour = Math.max(
+    workOpeningHour,
+    Math.min(23, Math.floor(appointmentOpenMinutes / 60)),
+  );
+  const appointmentClosingExclusive = Math.min(
+    workClosingExclusive,
+    Math.max(appointmentOpeningHour + 1, Math.ceil(appointmentCloseMinutes / 60)),
+  );
+
+  return {
+    appointmentOpeningHour,
+    appointmentClosingExclusive,
+    workOpeningHour,
+    workClosingExclusive,
   };
 }
 

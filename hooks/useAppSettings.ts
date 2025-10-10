@@ -4,10 +4,13 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiRequest } from '@/lib/queryClient';
+import { normalizeScheduleConfig } from '@/lib/time-utils';
 
 export interface AppSettings {
   centerOpensAt: string;
   centerClosesAt: string;
+  appointmentOpensAt: string;
+  appointmentClosesAt: string;
   openOnSaturday: boolean;
   openOnSunday: boolean;
   therapistCanViewOthers: boolean;
@@ -21,6 +24,8 @@ const SETTINGS_QUERY_KEY = ['/api/app-settings'];
 const DEFAULT_SETTINGS: AppSettings = {
   centerOpensAt: '09:00',
   centerClosesAt: '21:00',
+  appointmentOpensAt: '09:00',
+  appointmentClosesAt: '20:00',
   openOnSaturday: false,
   openOnSunday: false,
   therapistCanViewOthers: false,
@@ -44,9 +49,24 @@ function normalizeTime(value: unknown, fallback: string): string {
 }
 
 function withDefaults(data: Partial<AppSettings> | null | undefined): AppSettings {
+  const normalizedSchedule = normalizeScheduleConfig({
+    workOpensAt: normalizeTime(data?.centerOpensAt, DEFAULT_SETTINGS.centerOpensAt),
+    workClosesAt: normalizeTime(data?.centerClosesAt, DEFAULT_SETTINGS.centerClosesAt),
+    appointmentOpensAt: normalizeTime(
+      data?.appointmentOpensAt,
+      data?.centerOpensAt ?? DEFAULT_SETTINGS.appointmentOpensAt,
+    ),
+    appointmentClosesAt: normalizeTime(
+      data?.appointmentClosesAt,
+      data?.centerClosesAt ?? DEFAULT_SETTINGS.appointmentClosesAt,
+    ),
+  });
+
   return {
-    centerOpensAt: normalizeTime(data?.centerOpensAt, DEFAULT_SETTINGS.centerOpensAt),
-    centerClosesAt: normalizeTime(data?.centerClosesAt, DEFAULT_SETTINGS.centerClosesAt),
+    centerOpensAt: normalizedSchedule.workOpensAt,
+    centerClosesAt: normalizedSchedule.workClosesAt,
+    appointmentOpensAt: normalizedSchedule.appointmentOpensAt,
+    appointmentClosesAt: normalizedSchedule.appointmentClosesAt,
     openOnSaturday: data?.openOnSaturday ?? DEFAULT_SETTINGS.openOnSaturday,
     openOnSunday: data?.openOnSunday ?? DEFAULT_SETTINGS.openOnSunday,
     therapistCanViewOthers: data?.therapistCanViewOthers ?? DEFAULT_SETTINGS.therapistCanViewOthers,

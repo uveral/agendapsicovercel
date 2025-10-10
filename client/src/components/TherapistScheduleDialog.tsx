@@ -55,15 +55,26 @@ export function TherapistScheduleDialog({
   const [initialSnapshot, setInitialSnapshot] = useState<string>("");
 
   const hourBounds = useMemo(
-    () => deriveCenterHourBounds(settings.centerOpensAt, settings.centerClosesAt),
-    [settings.centerClosesAt, settings.centerOpensAt],
+    () =>
+      deriveCenterHourBounds({
+        appointmentOpensAt: settings.appointmentOpensAt,
+        appointmentClosesAt: settings.appointmentClosesAt,
+        workOpensAt: settings.centerOpensAt,
+        workClosesAt: settings.centerClosesAt,
+      }),
+    [
+      settings.appointmentClosesAt,
+      settings.appointmentOpensAt,
+      settings.centerClosesAt,
+      settings.centerOpensAt,
+    ],
   );
 
-  const { openingHour, therapistClosingExclusive, centerClosingExclusive } = hourBounds;
+  const { workOpeningHour, workClosingExclusive } = hourBounds;
 
   const hours = useMemo(
-    () => buildHourRange(openingHour, therapistClosingExclusive),
-    [openingHour, therapistClosingExclusive],
+    () => buildHourRange(workOpeningHour, workClosingExclusive),
+    [workClosingExclusive, workOpeningHour],
   );
 
   const dayOptions = useMemo(
@@ -99,15 +110,11 @@ export function TherapistScheduleDialog({
           return;
         }
 
-        const normalizedStart = Math.max(openingHour, startHour as number);
-        const shouldExtendToClosing = (endHour as number) >= centerClosingExclusive;
-        const normalizedEnd = Math.min(
-          therapistClosingExclusive,
-          shouldExtendToClosing ? (endHour as number) + 1 : (endHour as number),
-        );
+        const normalizedStart = Math.max(workOpeningHour, startHour as number);
+        const normalizedEnd = Math.min(workClosingExclusive, Math.max(normalizedStart, endHour as number));
 
         for (let hour = normalizedStart; hour < normalizedEnd; hour++) {
-          if (hour >= openingHour && hour < therapistClosingExclusive) {
+          if (hour >= workOpeningHour && hour < workClosingExclusive) {
             cells.add(`${slot.dayOfWeek}-${hour}`);
           }
         }
@@ -116,7 +123,7 @@ export function TherapistScheduleDialog({
       setSelectedCells(cells);
       setInitialSnapshot(serializeCells(cells));
     },
-    [allowedDayValues, centerClosingExclusive, openingHour, therapistClosingExclusive],
+    [allowedDayValues, workClosingExclusive, workOpeningHour],
   );
 
   useEffect(() => {
@@ -140,8 +147,8 @@ export function TherapistScheduleDialog({
         if (
           allowedDayValues.has(dayValue) &&
           Number.isFinite(hourValue) &&
-          hourValue >= openingHour &&
-          hourValue < therapistClosingExclusive
+          hourValue >= workOpeningHour &&
+          hourValue < workClosingExclusive
         ) {
           filtered.add(key);
         } else {
@@ -155,7 +162,7 @@ export function TherapistScheduleDialog({
 
       return filtered;
     });
-  }, [allowedDayValues, openingHour, therapistClosingExclusive]);
+  }, [allowedDayValues, workClosingExclusive, workOpeningHour]);
 
   useEffect(() => {
     if (!dragState?.active) {
@@ -175,7 +182,7 @@ export function TherapistScheduleDialog({
 
   const applyCellSelection = useCallback(
     (day: number, hour: number, shouldSelect: boolean) => {
-      if (!allowedDayValues.has(day) || hour < openingHour || hour >= therapistClosingExclusive) {
+      if (!allowedDayValues.has(day) || hour < workOpeningHour || hour >= workClosingExclusive) {
         return;
       }
 
@@ -192,7 +199,7 @@ export function TherapistScheduleDialog({
         return next;
       });
     },
-    [allowedDayValues, openingHour, therapistClosingExclusive],
+    [allowedDayValues, workClosingExclusive, workOpeningHour],
   );
 
   const toggleCell = useCallback(
@@ -276,14 +283,14 @@ export function TherapistScheduleDialog({
     dayOptions.forEach((day) => {
       let blockStart: number | null = null;
 
-      for (let hour = openingHour; hour <= therapistClosingExclusive; hour++) {
+      for (let hour = workOpeningHour; hour <= workClosingExclusive; hour++) {
         const isSelected =
-          hour < therapistClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
+          hour < workClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
 
         if (isSelected && blockStart === null) {
           blockStart = hour;
         } else if (!isSelected && blockStart !== null) {
-          const cappedEnd = Math.min(hour, centerClosingExclusive);
+          const cappedEnd = Math.min(hour, workClosingExclusive);
           if (cappedEnd > blockStart) {
             blocks.push({
               dayOfWeek: day.value,
@@ -296,7 +303,7 @@ export function TherapistScheduleDialog({
       }
 
       if (blockStart !== null) {
-        const finalEnd = Math.min(therapistClosingExclusive, centerClosingExclusive);
+        const finalEnd = workClosingExclusive;
         if (finalEnd > blockStart) {
           blocks.push({
             dayOfWeek: day.value,

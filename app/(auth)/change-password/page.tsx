@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiRequest } from '@/lib/queryClient';
 import { processPasswordChange } from '@/lib/auth/password-change';
 
-export default function ChangePasswordPage() {
+function ChangePasswordForm() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -129,5 +129,31 @@ export default function ChangePasswordPage() {
         </form>
       </Card>
     </div>
+  );
+}
+
+export default function ChangePasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 to-background px-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="space-y-1 text-center">
+              <CardTitle className="text-2xl font-semibold text-primary">Actualiza tu contraseña</CardTitle>
+              <CardDescription>Estamos preparando el formulario...</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="h-12 rounded bg-muted animate-pulse" />
+              <div className="h-12 rounded bg-muted animate-pulse" />
+            </CardContent>
+            <CardFooter>
+              <div className="h-10 w-full rounded bg-muted animate-pulse" />
+            </CardFooter>
+          </Card>
+        </div>
+      }
+    >
+      <ChangePasswordForm />
+    </Suspense>
   );
 }
