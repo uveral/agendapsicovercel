@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   addMonths,
@@ -22,17 +23,59 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettingsValue } from '@/hooks/useAppSettings';
 import { useDiagnosticCalendarData } from '@/hooks/useDiagnosticCalendarData';
+import AppointmentQuickCreateDialog from '@/components/AppointmentQuickCreateDialog';
+import { AppointmentEditDialog } from '@/components/AppointmentEditDialog';
+import SeriesActionDialog, { type SeriesActionScope } from '@/components/SeriesActionDialog';
 import type { Therapist, TherapistWorkingHours } from '@/lib/types';
 import type { NormalizedAppointment } from '@/shared/diagnosticCalendarData';
 import { getUniqueTherapists } from '@/shared/diagnosticCalendarData';
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 
-const DAY_LABELS_FULL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const DAY_LABELS_WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+const DAY_LABELS_MAP: Record<number, string> = {
+  0: 'Dom',
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
+};
+
+const WEEKDAY_ORDER_BASE: number[] = [1, 2, 3, 4, 5];
+
+function getVisibleDayOrder(openOnSaturday: boolean, openOnSunday: boolean): number[] {
+  const order = [...WEEKDAY_ORDER_BASE];
+
+  if (openOnSaturday) {
+    order.push(6);
+  }
+
+  if (openOnSunday) {
+    order.push(0);
+  }
+
+  return order;
+}
+
+function getDayLabels(dayOrder: number[]): string[] {
+  return dayOrder.map((weekday) => DAY_LABELS_MAP[weekday] ?? '');
+}
+
+function gridColumnClass(columnCount: number): string {
+  switch (columnCount) {
+    case 7:
+      return 'grid-cols-7';
+    case 6:
+      return 'grid-cols-6';
+    default:
+      return 'grid-cols-5';
+  }
+}
 
 interface TherapistOption {
   id: string;
@@ -46,7 +89,7 @@ type WorkingHoursMap = Map<string, TherapistWorkingHours[]>;
 
 type SlotStatus = 'busy' | 'free' | 'off';
 
-function buildMonthGrid(currentMonth: Date, showWeekends: boolean): Date[][] {
+function buildMonthGrid(currentMonth: Date, dayOrder: number[]): Date[][] {
   const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 });
   const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start, end });
@@ -54,15 +97,12 @@ function buildMonthGrid(currentMonth: Date, showWeekends: boolean): Date[][] {
 
   for (let index = 0; index < days.length; index += 7) {
     const slice = days.slice(index, index + 7);
-    const filtered = showWeekends
-      ? slice
-      : slice.filter((day) => {
-          const weekday = getDay(day);
-          return weekday !== 0 && weekday !== 6;
-        });
+    const ordered = dayOrder
+      .map((weekday) => slice.find((day) => getDay(day) === weekday))
+      .filter((value): value is Date => Boolean(value));
 
-    if (filtered.length > 0) {
-      weeks.push(filtered);
+    if (ordered.length > 0) {
+      weeks.push(ordered);
     }
   }
 
@@ -108,13 +148,74 @@ function groupWorkingHours(workingHours: TherapistWorkingHours[]): WorkingHoursM
 }
 
 function timeToMinutes(time: string): number {
-  const [hour, minute] = time.split(':').map((value) => parseInt(value, 10));
+  const [hoursPart, minutesPart] = time.split(':');
+  const hour = Number.parseInt(hoursPart ?? '', 10);
+  const minute = Number.parseInt(minutesPart ?? '', 10);
+
+  if (!Number.isFinite(hour)) {
+    return Number.NaN;
+  }
+
   return hour * 60 + (Number.isFinite(minute) ? minute : 0);
 }
 
-function useHourBlocks(workingHours: TherapistWorkingHours[], appointments: NormalizedAppointment[]) {
+function minutesToTime(minutes: number): string {
+  const normalized = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+function formatCompactHourLabel(time: string): string {
+  const [hoursPart = '0', minutesPart = '0'] = time.split(':');
+  const hours = Number.parseInt(hoursPart, 10);
+  const minutes = Number.parseInt(minutesPart, 10);
+
+  if (!Number.isFinite(hours)) {
+    return time.slice(0, 5);
+  }
+
+  if (!Number.isFinite(minutes) || minutes === 0) {
+    return `${hours}`;
+  }
+
+  return `${hours}:${minutes.toString().padStart(2, '0')}`;
+}
+
+function getBusySlotClassNames(status: NormalizedAppointment['status']): string {
+  switch (status) {
+    case 'pending':
+      return 'border-orange-300 bg-orange-200 hover:bg-orange-300/80 text-neutral-900';
+    case 'cancelled':
+      return 'border-neutral-300 bg-neutral-100 hover:bg-neutral-200 text-neutral-500 line-through';
+    case 'confirmed':
+    default:
+      return 'border-amber-300 bg-amber-200 hover:bg-amber-300/80 text-neutral-900';
+  }
+}
+
+function useHourBlocks(
+  workingHours: TherapistWorkingHours[],
+  appointments: NormalizedAppointment[],
+  opensAt: string,
+  closesAt: string,
+) {
   return useMemo(() => {
     const hours = new Set<number>();
+
+    const openMinutes = timeToMinutes(opensAt);
+    const closeMinutes = timeToMinutes(closesAt);
+    const hasValidRange =
+      Number.isFinite(openMinutes) && Number.isFinite(closeMinutes) && openMinutes < closeMinutes;
+    const rangeStart = hasValidRange ? Math.floor(openMinutes / 60) : null;
+    const rangeEnd = hasValidRange ? Math.ceil(closeMinutes / 60) : null;
+
+    if (rangeStart !== null && rangeEnd !== null && rangeStart < rangeEnd) {
+      for (let hour = rangeStart; hour < rangeEnd; hour += 1) {
+        hours.add(hour);
+      }
+    }
 
     workingHours.forEach((slot) => {
       const startHour = parseInt(slot.startTime.slice(0, 2), 10);
@@ -138,8 +239,26 @@ function useHourBlocks(workingHours: TherapistWorkingHours[], appointments: Norm
       return [9, 10, 11, 12, 13, 14, 15, 16, 17];
     }
 
-    return Array.from(hours).sort((a, b) => a - b);
-  }, [appointments, workingHours]);
+    const sorted = Array.from(hours).sort((a, b) => a - b);
+
+    const filtered = sorted.filter((hour) => {
+      if (rangeStart === null || rangeEnd === null) {
+        return true;
+      }
+
+      return hour >= rangeStart && hour < rangeEnd;
+    });
+
+    if (filtered.length > 0) {
+      return filtered;
+    }
+
+    if (sorted.length === 0) {
+      return [9, 10, 11, 12, 13, 14, 15, 16, 17];
+    }
+
+    return sorted;
+  }, [appointments, closesAt, opensAt, workingHours]);
 }
 
 function getTherapistSlots(
@@ -148,9 +267,31 @@ function getTherapistSlots(
   hour: number,
   workingHours: WorkingHoursMap,
   appointments: AppointmentsByTherapist,
+  openOnSaturday: boolean,
+  openOnSunday: boolean,
+  workOpenMinutes: number,
+  workCloseMinutes: number,
+  appointmentOpenMinutes: number,
+  appointmentCloseMinutes: number,
 ): SlotStatus {
   const isoDate = format(date, 'yyyy-MM-dd');
   const dayOfWeek = getDay(date);
+
+  if ((dayOfWeek === 6 && !openOnSaturday) || (dayOfWeek === 0 && !openOnSunday)) {
+    return 'off';
+  }
+
+  if (
+    Number.isFinite(workOpenMinutes) &&
+    Number.isFinite(workCloseMinutes) &&
+    workOpenMinutes < workCloseMinutes
+  ) {
+    const hourStart = hour * 60;
+    if (hourStart < workOpenMinutes || hourStart >= workCloseMinutes) {
+      return 'off';
+    }
+  }
+
   const therapistHours = workingHours.get(therapistId) ?? [];
   const worksAtHour = therapistHours.some((slot) => {
     if (slot.dayOfWeek !== dayOfWeek) return false;
@@ -164,28 +305,74 @@ function getTherapistSlots(
     return 'off';
   }
 
+  const hourStartMinutes = hour * 60;
+
   const therapistAppointments = appointments.get(therapistId)?.get(isoDate) ?? [];
   const occupied = therapistAppointments.some((appointment) => {
     const startMinutes = timeToMinutes(appointment.startTime);
     const endMinutes = timeToMinutes(appointment.endTime);
-    const hourMinutes = hour * 60;
-    return hourMinutes >= startMinutes && hourMinutes < endMinutes;
+    return hourStartMinutes >= startMinutes && hourStartMinutes < endMinutes;
   });
 
-  return occupied ? 'busy' : 'free';
+  if (occupied) {
+    return 'busy';
+  }
+
+  if (
+    Number.isFinite(appointmentOpenMinutes) &&
+    Number.isFinite(appointmentCloseMinutes) &&
+    appointmentOpenMinutes < appointmentCloseMinutes
+  ) {
+    if (hourStartMinutes < appointmentOpenMinutes || hourStartMinutes >= appointmentCloseMinutes) {
+      return 'off';
+    }
+  }
+
+  return 'free';
 }
 
-function AppointmentDayCell({
+function GlobalDayCell({
   day,
+  therapists,
+  hourBlocks,
+  workingHours,
   appointments,
   isCurrentMonth,
+  openOnSaturday,
+  openOnSunday,
+  centerOpenMinutes,
+  centerCloseMinutes,
+  appointmentOpenMinutes,
+  appointmentCloseMinutes,
+  onSlotClick,
 }: {
   day: Date;
-  appointments: NormalizedAppointment[];
+  therapists: TherapistOption[];
+  hourBlocks: number[];
+  workingHours: WorkingHoursMap;
+  appointments: AppointmentsByTherapist;
   isCurrentMonth: boolean;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
+  centerOpenMinutes: number;
+  centerCloseMinutes: number;
+  appointmentOpenMinutes: number;
+  appointmentCloseMinutes: number;
+  onSlotClick?: (date: Date, hour: number, therapistId: string, status: SlotStatus) => void;
 }) {
-  const displayAppointments = appointments.slice(0, 6);
-  const extraCount = appointments.length - displayAppointments.length;
+  const statusClass = (status: SlotStatus) => {
+    switch (status) {
+      case 'busy':
+        return 'bg-amber-400';
+      case 'free':
+        return 'bg-emerald-500';
+      default:
+        return 'bg-muted';
+    }
+  };
+
+  const dayKey = format(day, 'yyyyMMdd');
+  const dayLabel = format(day, 'd MMM', { locale: esLocale });
 
   return (
     <div
@@ -200,62 +387,211 @@ function AppointmentDayCell({
         {!isCurrentMonth && <span className="text-[10px]">{format(day, 'MMM', { locale: esLocale })}</span>}
       </div>
       <div className="mt-2 space-y-1">
-        {displayAppointments.map((appointment) => (
-          <div
-            key={appointment.id}
-            className="rounded-sm bg-muted px-1 py-0.5 text-[11px] leading-tight"
-          >
-            <span className="font-medium">{appointment.startTime.slice(0, 5)}</span>
-            <span className="mx-1 text-muted-foreground">·</span>
-            <span className="truncate">{appointment.clientName}</span>
-          </div>
-        ))}
-        {extraCount > 0 && (
-          <div className="text-[10px] text-muted-foreground">+{extraCount} más</div>
-        )}
+        {hourBlocks.map((hour) => {
+          const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
+
+          return (
+            <div
+              key={`${dayKey}-${hour}`}
+              className="grid items-center gap-[2px]"
+              style={{ gridTemplateColumns: `minmax(2.5rem, auto) repeat(${therapists.length}, minmax(0, 1fr))` }}
+            >
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{hourLabel}</span>
+              {therapists.map((therapist) => {
+                const status = getTherapistSlots(
+                  therapist.id,
+                  day,
+                  hour,
+                  workingHours,
+                  appointments,
+                  openOnSaturday,
+                  openOnSunday,
+                  centerOpenMinutes,
+                  centerCloseMinutes,
+                  appointmentOpenMinutes,
+                  appointmentCloseMinutes,
+                );
+
+                return (
+                  <button
+                    key={`${therapist.id}-${dayKey}-${hour}`}
+                    className={cn(
+                      'h-2 w-full rounded-sm md:h-3 transition-all',
+                      statusClass(status),
+                      status === 'free' && 'cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1'
+                    )}
+                    title={`${dayLabel} · ${hourLabel} · ${therapist.name}`}
+                    onClick={() => onSlotClick?.(day, hour, therapist.id, status)}
+                    disabled={status !== 'free'}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function GlobalDayCell({
-  day,
-  therapists,
-  hourBlocks,
-  workingHours,
-  appointments,
-  isCurrentMonth,
-}: {
+interface TherapistDayCellProps {
   day: Date;
-  therapists: TherapistOption[];
+  therapistId: string;
+  appointmentsByDate: AppointmentsByDate;
+  allAppointments: AppointmentsByTherapist;
   hourBlocks: number[];
   workingHours: WorkingHoursMap;
-  appointments: AppointmentsByTherapist;
   isCurrentMonth: boolean;
-}) {
-  const slotSquares = hourBlocks.flatMap((hour) =>
-    therapists.map((therapist) => ({
-      therapist,
-      hour,
-      status: getTherapistSlots(therapist.id, day, hour, workingHours, appointments),
-    })),
-  );
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
+  centerOpenMinutes: number;
+  centerCloseMinutes: number;
+  appointmentOpenMinutes: number;
+  appointmentCloseMinutes: number;
+  onFreeSlotClick?: (date: Date, hour: number, therapistId: string) => void;
+  onBusySlotClick?: (appointment: NormalizedAppointment, therapistId: string, date: Date) => void;
+  onAppointmentDragStart?: (appointment: NormalizedAppointment) => void;
+  onAppointmentDragEnd?: () => void;
+  onDropOnSlot?: (date: Date, hour: number, therapistId: string) => void;
+  draggedAppointmentId?: string | null;
+}
 
-  const statusClass = (status: SlotStatus) => {
-    switch (status) {
-      case 'busy':
-        return 'bg-amber-400';
-      case 'free':
-        return 'bg-emerald-500';
-      default:
-        return 'bg-muted';
+function TherapistDayCell({
+  day,
+  therapistId,
+  appointmentsByDate,
+  allAppointments,
+  hourBlocks,
+  workingHours,
+  isCurrentMonth,
+  openOnSaturday,
+  openOnSunday,
+  centerOpenMinutes,
+  centerCloseMinutes,
+  appointmentOpenMinutes,
+  appointmentCloseMinutes,
+  onFreeSlotClick,
+  onBusySlotClick,
+  onAppointmentDragStart,
+  onAppointmentDragEnd,
+  onDropOnSlot,
+  draggedAppointmentId,
+}: TherapistDayCellProps) {
+  const isoDate = format(day, 'yyyy-MM-dd');
+  const dayAppointments = appointmentsByDate.get(isoDate) ?? [];
+  const slots = hourBlocks.map((hour) => {
+    const status = getTherapistSlots(
+      therapistId,
+      day,
+      hour,
+      workingHours,
+      allAppointments,
+      openOnSaturday,
+      openOnSunday,
+      centerOpenMinutes,
+      centerCloseMinutes,
+      appointmentOpenMinutes,
+      appointmentCloseMinutes,
+    );
+    const slotAppointment = dayAppointments.find((appointment) => {
+      const startMinutes = timeToMinutes(appointment.startTime);
+      const endMinutes = timeToMinutes(appointment.endTime);
+      const hourMinutes = hour * 60;
+      return (
+        Number.isFinite(startMinutes) &&
+        Number.isFinite(endMinutes) &&
+        hourMinutes >= startMinutes &&
+        hourMinutes < endMinutes
+      );
+    });
+
+    if (status === 'busy' && slotAppointment) {
+      const isDragging = draggedAppointmentId === slotAppointment.id;
+      const displayTime = formatCompactHourLabel(slotAppointment.startTime);
+      const ringClass =
+        slotAppointment.status === 'pending'
+          ? 'ring-orange-500'
+          : slotAppointment.status === 'cancelled'
+            ? 'ring-neutral-400'
+            : 'ring-amber-500';
+
+      return (
+        <button
+          key={`${isoDate}-${hour}`}
+          type="button"
+          className={cn(
+            'w-full rounded-sm border px-2 py-1 text-left text-[11px] font-semibold leading-tight text-neutral-900 transition-colors',
+            getBusySlotClassNames(slotAppointment.status),
+            isDragging && `opacity-70 ring-2 ${ringClass}`,
+          )}
+          title={`${displayTime} - ${slotAppointment.clientName}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (draggedAppointmentId) return;
+            onBusySlotClick?.(slotAppointment, therapistId, day);
+          }}
+          draggable
+          onDragStart={(event) => {
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', slotAppointment.id);
+            onAppointmentDragStart?.(slotAppointment);
+          }}
+          onDragEnd={() => {
+            onAppointmentDragEnd?.();
+          }}
+        >
+          <div className="truncate">
+            {displayTime} - {slotAppointment.clientName}
+          </div>
+        </button>
+      );
     }
-  };
+
+    if (status === 'free') {
+      const isDropActive = Boolean(draggedAppointmentId);
+      const displayTime = formatCompactHourLabel(`${hour.toString().padStart(2, '0')}:00`);
+
+      return (
+        <button
+          key={`${isoDate}-${hour}`}
+          type="button"
+          className={cn(
+            'w-full rounded-sm border border-dashed border-emerald-400 bg-emerald-100/70 px-2 py-1 text-left text-[11px] font-semibold leading-tight text-neutral-900 transition-colors',
+            'hover:bg-emerald-200/80',
+            isDropActive && 'border-solid',
+          )}
+          title={`${displayTime} - Hueco disponible`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onFreeSlotClick?.(day, hour, therapistId);
+          }}
+          onDragOver={(event) => {
+            if (!isDropActive) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={(event) => {
+            if (!isDropActive) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onDropOnSlot?.(day, hour, therapistId);
+          }}
+        >
+          <div className="truncate">{displayTime} - Hueco disponible</div>
+        </button>
+      );
+    }
+
+    return null;
+  });
+
+  const hasContent = slots.some((slot) => slot !== null);
 
   return (
     <div
       className={cn(
-        'min-h-[120px] rounded-md border p-2 transition-colors',
+        'min-h-[140px] rounded-md border p-2 transition-colors',
         isCurrentMonth ? 'bg-background' : 'bg-muted/50 text-muted-foreground',
         isToday(day) && 'border-primary',
       )}
@@ -264,17 +600,14 @@ function GlobalDayCell({
         <span>{format(day, 'd')}</span>
         {!isCurrentMonth && <span className="text-[10px]">{format(day, 'MMM', { locale: esLocale })}</span>}
       </div>
-      <div
-        className="mt-2 grid gap-[2px]"
-        style={{ gridTemplateColumns: `repeat(${therapists.length}, minmax(0, 1fr))` }}
-      >
-        {slotSquares.map(({ therapist, hour, status }) => (
-          <span
-            key={`${therapist.id}-${format(day, 'yyyyMMdd')}-${hour}`}
-            className={cn('h-2 w-full rounded-sm md:h-3', statusClass(status))}
-            title={`${format(day, 'd MMM', { locale: esLocale })} · ${hour.toString().padStart(2, '0')}:00 · ${therapist.name}`}
-          />
-        ))}
+      <div className="mt-2 space-y-1">
+        {hasContent ? (
+          slots
+        ) : (
+          <div className="rounded-sm border border-dashed px-2 py-3 text-center text-[11px] text-muted-foreground">
+            Sin horario disponible
+          </div>
+        )}
       </div>
     </div>
   );
@@ -284,20 +617,51 @@ const ALL_THERAPISTS_VALUE = '__all__';
 
 interface TherapistMonthCalendarProps {
   therapist: TherapistOption;
-  appointments: AppointmentsByDate;
+  appointmentsByDate: AppointmentsByDate;
+  allAppointments: AppointmentsByTherapist;
   currentMonth: Date;
   monthGrid: Date[][];
-  showWeekends: boolean;
+  dayLabels: string[];
+  hourBlocks: number[];
+  workingHours: WorkingHoursMap;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
+  centerOpenMinutes: number;
+  centerCloseMinutes: number;
+  appointmentOpenMinutes: number;
+  appointmentCloseMinutes: number;
+  onFreeSlotClick?: (date: Date, hour: number, therapistId: string) => void;
+  onBusySlotClick?: (appointment: NormalizedAppointment, therapistId: string, date: Date) => void;
+  onAppointmentDragStart?: (appointment: NormalizedAppointment) => void;
+  onAppointmentDragEnd?: () => void;
+  onDropOnSlot?: (date: Date, hour: number, therapistId: string) => void;
+  draggedAppointmentId?: string | null;
 }
 
 function TherapistMonthCalendar({
   therapist,
-  appointments,
+  appointmentsByDate,
+  allAppointments,
   currentMonth,
   monthGrid,
-  showWeekends,
+  dayLabels,
+  hourBlocks,
+  workingHours,
+  openOnSaturday,
+  openOnSunday,
+  centerOpenMinutes,
+  centerCloseMinutes,
+  appointmentOpenMinutes,
+  appointmentCloseMinutes,
+  onFreeSlotClick,
+  onBusySlotClick,
+  onAppointmentDragStart,
+  onAppointmentDragEnd,
+  onDropOnSlot,
+  draggedAppointmentId,
 }: TherapistMonthCalendarProps) {
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: esLocale });
+  const columnClass = gridColumnClass(dayLabels.length);
 
   return (
     <Card>
@@ -308,8 +672,8 @@ function TherapistMonthCalendar({
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-4 sm:px-6 sm:pb-6">
         <div className="grid gap-4">
-          <div className={cn('grid gap-2', showWeekends ? 'grid-cols-7' : 'grid-cols-5')}>
-            {(showWeekends ? DAY_LABELS_FULL : DAY_LABELS_WEEK).map((label) => (
+          <div className={cn('grid gap-2', columnClass)}>
+            {dayLabels.map((label) => (
               <div key={label} className="text-center text-xs font-semibold uppercase text-muted-foreground">
                 {label}
               </div>
@@ -319,21 +683,32 @@ function TherapistMonthCalendar({
             {monthGrid.map((week, weekIndex) => (
               <div
                 key={weekIndex}
-                className={cn('grid gap-2', showWeekends ? 'grid-cols-7' : 'grid-cols-5')}
+                className={cn('grid gap-2', columnClass)}
               >
-                {week.map((day) => {
-                  const isoDate = format(day, 'yyyy-MM-dd');
-                  const dayAppointments = appointments.get(isoDate) ?? [];
-
-                  return (
-                    <AppointmentDayCell
-                      key={isoDate}
-                      day={day}
-                      appointments={dayAppointments}
-                      isCurrentMonth={isSameMonth(day, currentMonth)}
-                    />
-                  );
-                })}
+                {week.map((day) => (
+                  <TherapistDayCell
+                    key={format(day, 'yyyy-MM-dd')}
+                    day={day}
+                    therapistId={therapist.id}
+                    appointmentsByDate={appointmentsByDate}
+                    allAppointments={allAppointments}
+                    hourBlocks={hourBlocks}
+                    workingHours={workingHours}
+                    isCurrentMonth={isSameMonth(day, currentMonth)}
+                    openOnSaturday={openOnSaturday}
+                    openOnSunday={openOnSunday}
+                    centerOpenMinutes={centerOpenMinutes}
+                    centerCloseMinutes={centerCloseMinutes}
+                    appointmentOpenMinutes={appointmentOpenMinutes}
+                    appointmentCloseMinutes={appointmentCloseMinutes}
+                    onFreeSlotClick={onFreeSlotClick}
+                    onBusySlotClick={onBusySlotClick}
+                    onAppointmentDragStart={onAppointmentDragStart}
+                    onAppointmentDragEnd={onAppointmentDragEnd}
+                    onDropOnSlot={onDropOnSlot}
+                    draggedAppointmentId={draggedAppointmentId}
+                  />
+                ))}
               </div>
             ))}
           </div>
@@ -346,7 +721,8 @@ function TherapistMonthCalendar({
 export default function CalendarPage() {
   const { user, loading: authLoading } = useAuth();
   const settings = useAppSettingsValue();
-  const { appointments, isLoading: appointmentsLoading, source } = useDiagnosticCalendarData();
+  const { appointments, isLoading: appointmentsLoading } = useDiagnosticCalendarData();
+  const { toast } = useToast();
   const { data: therapists = [], isLoading: therapistsLoading } = useQuery<Therapist[]>({
     queryKey: ['/api/therapists'],
   });
@@ -357,12 +733,60 @@ export default function CalendarPage() {
   const isAdmin = user?.role === 'admin';
   const therapistOwnId = user?.therapistId ?? null;
   const canViewOthers = isAdmin || settings.therapistCanViewOthers;
+  const searchParams = useSearchParams();
+  const viewFromQuery = searchParams.get('view');
+  const therapistFromQuery = searchParams.get('therapist');
 
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
-  const [viewMode, setViewMode] = useState<'personal' | 'global'>('personal');
-  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() =>
-    isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '',
-  );
+  const [viewMode, setViewMode] = useState<'personal' | 'global'>(() => {
+    if (viewFromQuery === 'personal' || viewFromQuery === 'global') {
+      return viewFromQuery;
+    }
+    return isAdmin ? 'global' : 'personal';
+  });
+  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(() => {
+    if (therapistFromQuery !== null) {
+      return therapistFromQuery;
+    }
+    return isAdmin ? ALL_THERAPISTS_VALUE : therapistOwnId ?? '';
+  });
+  const [quickCreateDialogOpen, setQuickCreateDialogOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    date: Date;
+    hour: number;
+    clickedTherapistId: string;
+  } | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [selectedAppointmentScope, setSelectedAppointmentScope] = useState<SeriesActionScope>('this_only');
+  const [draggedAppointment, setDraggedAppointment] = useState<NormalizedAppointment | null>(null);
+  const [seriesDialogOpen, setSeriesDialogOpen] = useState(false);
+  const [seriesDialogFrequency, setSeriesDialogFrequency] = useState<'semanal' | 'quincenal'>('semanal');
+  const [pendingSeriesContext, setPendingSeriesContext] = useState<
+    | { type: 'open_edit'; appointment: NormalizedAppointment }
+    | { type: 'move'; appointment: NormalizedAppointment; target: { date: Date; hour: number; therapistId: string } }
+    | null
+  >(null);
+  const [isProcessingMove, setIsProcessingMove] = useState(false);
+  const adminViewInitializedRef = useRef(isAdmin);
+
+  useEffect(() => {
+    if (isAdmin && !adminViewInitializedRef.current) {
+      setViewMode('global');
+      adminViewInitializedRef.current = true;
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (viewFromQuery === 'personal' || viewFromQuery === 'global') {
+      setViewMode(viewFromQuery);
+    }
+  }, [viewFromQuery]);
+
+  useEffect(() => {
+    if (therapistFromQuery !== null) {
+      setSelectedTherapistId(therapistFromQuery);
+    }
+  }, [therapistFromQuery]);
 
   const appointmentsByTherapist = useMemo(
     () => groupAppointmentsByTherapist(appointments),
@@ -370,7 +794,18 @@ export default function CalendarPage() {
   );
 
   const workingHoursMap = useMemo(() => groupWorkingHours(workingHours), [workingHours]);
-  const hourBlocks = useHourBlocks(workingHours, appointments);
+  const personalHourBlocks = useHourBlocks(
+    workingHours,
+    appointments,
+    settings.centerOpensAt,
+    settings.centerClosesAt,
+  );
+  const globalHourBlocks = useHourBlocks(
+    workingHours,
+    appointments,
+    settings.appointmentOpensAt,
+    settings.appointmentClosesAt,
+  );
 
   const baseTherapists: TherapistOption[] = useMemo(() => {
     const mapped = therapists.map((therapist) => ({ id: therapist.id, name: therapist.name }));
@@ -439,10 +874,208 @@ export default function CalendarPage() {
     }
   }, [resolvedSelectedTherapistId, selectedTherapistId]);
 
-  const monthGrid = useMemo(
-    () => buildMonthGrid(currentMonth, settings.showWeekends),
-    [currentMonth, settings.showWeekends],
+  const dayOrder = useMemo(
+    () => getVisibleDayOrder(settings.openOnSaturday, settings.openOnSunday),
+    [settings.openOnSaturday, settings.openOnSunday],
   );
+
+  const dayLabels = useMemo(() => getDayLabels(dayOrder), [dayOrder]);
+
+  const monthGrid = useMemo(
+    () => buildMonthGrid(currentMonth, dayOrder),
+    [currentMonth, dayOrder],
+  );
+
+  const centerOpenMinutes = timeToMinutes(settings.centerOpensAt);
+  const centerCloseMinutes = timeToMinutes(settings.centerClosesAt);
+  const appointmentOpenMinutes = timeToMinutes(settings.appointmentOpensAt);
+  const appointmentCloseMinutes = timeToMinutes(settings.appointmentClosesAt);
+
+  const performAppointmentMove = useCallback(
+    async (
+      appointment: NormalizedAppointment,
+      scope: SeriesActionScope,
+      target: { date: Date; hour: number; therapistId: string },
+    ) => {
+      const resolvedScope = scope === 'all' ? 'this_and_future' : scope;
+      const isoDate = format(target.date, 'yyyy-MM-dd');
+      const [, minutePartRaw] = appointment.startTime.split(':');
+      const minutePart = Number.parseInt(minutePartRaw ?? '0', 10);
+      const startMinutes = target.hour * 60 + (Number.isFinite(minutePart) ? minutePart : 0);
+      const originalStartMinutes = timeToMinutes(appointment.startTime);
+      const originalEndMinutes = timeToMinutes(appointment.endTime);
+      const durationSource = appointment.durationMinutes;
+      const durationMinutes =
+        typeof durationSource === 'number' && Number.isFinite(durationSource)
+          ? durationSource
+          : Number.isFinite(originalStartMinutes) && Number.isFinite(originalEndMinutes)
+            ? originalEndMinutes - originalStartMinutes
+            : 60;
+      const endMinutes = startMinutes + (Number.isFinite(durationMinutes) ? durationMinutes : 60);
+      const newStartTime = minutesToTime(startMinutes);
+      const newEndTime = minutesToTime(endMinutes);
+
+      setIsProcessingMove(true);
+      try {
+        const payload = {
+          date: isoDate,
+          startTime: newStartTime,
+          endTime: newEndTime,
+          therapistId: target.therapistId,
+        };
+
+        const isRecurring = appointment.frequency && appointment.frequency !== 'puntual';
+
+        if (isRecurring) {
+          await apiRequest(
+            'PATCH',
+            `/api/appointments/${appointment.id}/series?scope=${resolvedScope}`,
+            payload,
+          );
+        } else {
+          await apiRequest('PATCH', `/api/appointments/${appointment.id}`, payload);
+        }
+
+        await queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+        toast({
+          title: 'Cita reprogramada',
+          description: `${appointment.clientName} pasa al ${format(target.date, "EEEE d 'de' MMMM", {
+            locale: esLocale,
+          })} a las ${newStartTime}`,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo reprogramar la cita';
+        toast({
+          title: 'Error al mover la cita',
+          description: message,
+          variant: 'destructive',
+        });
+      } finally {
+        setIsProcessingMove(false);
+      }
+    },
+    [toast],
+  );
+
+  const handleAppointmentDragStart = useCallback((appointment: NormalizedAppointment) => {
+    setDraggedAppointment(appointment);
+  }, []);
+
+  const handleAppointmentDragEnd = useCallback(() => {
+    setDraggedAppointment(null);
+  }, []);
+
+  const handleBusySlotClick = useCallback(
+    (appointment: NormalizedAppointment) => {
+      if (appointment.frequency === 'semanal' || appointment.frequency === 'quincenal') {
+        setPendingSeriesContext({ type: 'open_edit', appointment });
+        setSeriesDialogFrequency(appointment.frequency === 'quincenal' ? 'quincenal' : 'semanal');
+        setSeriesDialogOpen(true);
+        return;
+      }
+
+      setSelectedAppointmentScope('this_only');
+      setSelectedAppointmentId(appointment.id);
+    },
+    [],
+  );
+
+  const handleSlotDrop = useCallback(
+    (date: Date, hour: number, therapistId: string) => {
+      if (!draggedAppointment || isProcessingMove) {
+        return;
+      }
+
+      const isoDate = format(date, 'yyyy-MM-dd');
+      const originalHour = Number.parseInt(draggedAppointment.startTime.slice(0, 2), 10);
+
+      if (
+        draggedAppointment.therapistId === therapistId &&
+        draggedAppointment.date === isoDate &&
+        Number.isFinite(originalHour) &&
+        originalHour === hour
+      ) {
+        setDraggedAppointment(null);
+        return;
+      }
+
+      const target = { date, hour, therapistId };
+
+      if (draggedAppointment.frequency === 'semanal' || draggedAppointment.frequency === 'quincenal') {
+        setPendingSeriesContext({ type: 'move', appointment: draggedAppointment, target });
+        setSeriesDialogFrequency(draggedAppointment.frequency === 'quincenal' ? 'quincenal' : 'semanal');
+        setSeriesDialogOpen(true);
+      } else {
+        void performAppointmentMove(draggedAppointment, 'this_only', target);
+      }
+
+      setDraggedAppointment(null);
+    },
+    [draggedAppointment, isProcessingMove, performAppointmentMove],
+  );
+
+  const handleSlotClick = (date: Date, hour: number, clickedTherapistId: string, status: SlotStatus) => {
+    if (status !== 'free') return;
+
+    setSelectedSlot({ date, hour, clickedTherapistId });
+    setQuickCreateDialogOpen(true);
+  };
+
+  const availableTherapistsForSlot = useMemo(() => {
+    if (!selectedSlot) return [];
+
+    return baseTherapists.map(therapist => {
+      const status = getTherapistSlots(
+        therapist.id,
+        selectedSlot.date,
+        selectedSlot.hour,
+        workingHoursMap,
+        appointmentsByTherapist,
+        settings.openOnSaturday,
+        settings.openOnSunday,
+        centerOpenMinutes,
+        centerCloseMinutes,
+        appointmentOpenMinutes,
+        appointmentCloseMinutes,
+      );
+
+      const therapistData = therapists.find(t => t.id === therapist.id);
+
+      return {
+        therapist: therapistData ?? {
+          id: therapist.id,
+          name: therapist.name,
+          specialty: '',
+          email: null,
+          phone: null,
+          color: undefined,
+          createdAt: new Date().toISOString(),
+        },
+        isInSchedule: status === 'free',
+      };
+    }).sort((a, b) => {
+      // Clicked therapist first
+      if (a.therapist.id === selectedSlot.clickedTherapistId) return -1;
+      if (b.therapist.id === selectedSlot.clickedTherapistId) return 1;
+      // Then in-schedule therapists
+      if (a.isInSchedule && !b.isInSchedule) return -1;
+      if (!a.isInSchedule && b.isInSchedule) return 1;
+      // Then by name
+      return a.therapist.name.localeCompare(b.therapist.name);
+    });
+  }, [
+    selectedSlot,
+    appointmentCloseMinutes,
+    appointmentOpenMinutes,
+    baseTherapists,
+    therapists,
+    workingHoursMap,
+    appointmentsByTherapist,
+    settings.openOnSaturday,
+    settings.openOnSunday,
+    centerOpenMinutes,
+    centerCloseMinutes,
+  ]);
 
   const isLoading = authLoading || appointmentsLoading || therapistsLoading;
 
@@ -456,23 +1089,35 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold">Calendario</h1>
-          <p className="text-muted-foreground">
-            Gestiona las citas mensuales y revisa la ocupación por terapeuta.
-          </p>
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Datos: {source === 'supabase' ? 'Supabase' : 'Ejemplo interno'}</span>
-            <Separator orientation="vertical" className="h-3" />
-            <span>{settings.showWeekends ? 'Incluye fines de semana' : 'Sólo lunes a viernes'}</span>
-          </div>
+          {isAdmin && visibleTherapists.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs sm:text-sm">
+              <span className="font-medium">Leyenda</span>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+                <span>Hora libre</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-amber-400" />
+                <span>Hora ocupada</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-muted" />
+                <span>Fuera de horario</span>
+              </div>
+              <Badge variant="outline" className="ml-0 sm:ml-2">
+                {visibleTherapists.length} terapeutas
+              </Badge>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 sm:justify-end">
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth((month) => addMonths(month, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[160px] text-center text-sm font-medium capitalize">
+          <span className="min-w-[140px] text-center text-sm font-medium capitalize">
             {format(currentMonth, 'MMMM yyyy', { locale: esLocale })}
           </span>
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth((month) => addMonths(month, 1))}>
@@ -531,10 +1176,27 @@ export default function CalendarPage() {
                       <TherapistMonthCalendar
                         key={therapist.id}
                         therapist={therapist}
-                        appointments={therapistAppointments}
+                        appointmentsByDate={therapistAppointments}
+                        allAppointments={appointmentsByTherapist}
                         currentMonth={currentMonth}
                         monthGrid={monthGrid}
-                        showWeekends={settings.showWeekends}
+                        dayLabels={dayLabels}
+                        hourBlocks={personalHourBlocks}
+                        workingHours={workingHoursMap}
+                        openOnSaturday={settings.openOnSaturday}
+                        openOnSunday={settings.openOnSunday}
+                        centerOpenMinutes={centerOpenMinutes}
+                        centerCloseMinutes={centerCloseMinutes}
+                        appointmentOpenMinutes={appointmentOpenMinutes}
+                        appointmentCloseMinutes={appointmentCloseMinutes}
+                        onFreeSlotClick={(date, hour, therapistId) =>
+                          handleSlotClick(date, hour, therapistId, 'free')
+                        }
+                        onBusySlotClick={(appointment) => handleBusySlotClick(appointment)}
+                        onAppointmentDragStart={handleAppointmentDragStart}
+                        onAppointmentDragEnd={handleAppointmentDragEnd}
+                        onDropOnSlot={handleSlotDrop}
+                        draggedAppointmentId={draggedAppointment?.id ?? null}
                       />
                     );
                   })}
@@ -548,10 +1210,27 @@ export default function CalendarPage() {
                   <TabsContent key={therapist.id} value={therapist.id} className="mt-6">
                     <TherapistMonthCalendar
                       therapist={therapist}
-                      appointments={therapistAppointments}
+                      appointmentsByDate={therapistAppointments}
+                      allAppointments={appointmentsByTherapist}
                       currentMonth={currentMonth}
                       monthGrid={monthGrid}
-                      showWeekends={settings.showWeekends}
+                      dayLabels={dayLabels}
+                      hourBlocks={personalHourBlocks}
+                      workingHours={workingHoursMap}
+                      openOnSaturday={settings.openOnSaturday}
+                      openOnSunday={settings.openOnSunday}
+                      centerOpenMinutes={centerOpenMinutes}
+                      centerCloseMinutes={centerCloseMinutes}
+                      appointmentOpenMinutes={appointmentOpenMinutes}
+                      appointmentCloseMinutes={appointmentCloseMinutes}
+                      onFreeSlotClick={(date, hour, therapistId) =>
+                        handleSlotClick(date, hour, therapistId, 'free')
+                      }
+                      onBusySlotClick={(appointment) => handleBusySlotClick(appointment)}
+                      onAppointmentDragStart={handleAppointmentDragStart}
+                      onAppointmentDragEnd={handleAppointmentDragEnd}
+                      onDropOnSlot={handleSlotDrop}
+                      draggedAppointmentId={draggedAppointment?.id ?? null}
                     />
                   </TabsContent>
                 );
@@ -570,32 +1249,11 @@ export default function CalendarPage() {
                 </CardContent>
               </Card>
             ) : (
-              <>
+              <> 
                 <Card>
                   <CardContent className="p-4 sm:p-6">
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <span className="font-medium">Leyenda</span>
-                      <div className="flex items-center gap-1">
-                        <span className="h-3 w-3 rounded-sm bg-emerald-500" />
-                        <span>Hora libre</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="h-3 w-3 rounded-sm bg-amber-400" />
-                        <span>Hora ocupada</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="h-3 w-3 rounded-sm bg-muted" />
-                        <span>Fuera de horario</span>
-                      </div>
-                      <Badge variant="outline" className="ml-auto">{visibleTherapists.length} terapeutas</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-4 sm:p-6">
-                    <div className={cn('grid gap-2', settings.showWeekends ? 'grid-cols-7' : 'grid-cols-5')}>
-                      {(settings.showWeekends ? DAY_LABELS_FULL : DAY_LABELS_WEEK).map((label) => (
+                    <div className={cn('grid gap-2', gridColumnClass(dayLabels.length))}>
+                      {dayLabels.map((label) => (
                         <div key={label} className="text-center text-xs font-semibold uppercase text-muted-foreground">
                           {label}
                         </div>
@@ -605,17 +1263,24 @@ export default function CalendarPage() {
                       {monthGrid.map((week, weekIndex) => (
                         <div
                           key={weekIndex}
-                          className={cn('grid gap-2', settings.showWeekends ? 'grid-cols-7' : 'grid-cols-5')}
+                          className={cn('grid gap-2', gridColumnClass(dayLabels.length))}
                         >
                           {week.map((day) => (
                             <GlobalDayCell
                               key={format(day, 'yyyy-MM-dd')}
                               day={day}
                               therapists={visibleTherapists}
-                              hourBlocks={hourBlocks}
+                              hourBlocks={globalHourBlocks}
                               workingHours={workingHoursMap}
                               appointments={appointmentsByTherapist}
                               isCurrentMonth={isSameMonth(day, currentMonth)}
+                              openOnSaturday={settings.openOnSaturday}
+                              openOnSunday={settings.openOnSunday}
+                              centerOpenMinutes={centerOpenMinutes}
+                              centerCloseMinutes={centerCloseMinutes}
+                              appointmentOpenMinutes={appointmentOpenMinutes}
+                              appointmentCloseMinutes={appointmentCloseMinutes}
+                              onSlotClick={handleSlotClick}
                             />
                           ))}
                         </div>
@@ -628,6 +1293,61 @@ export default function CalendarPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {selectedSlot && (
+        <AppointmentQuickCreateDialog
+          open={quickCreateDialogOpen}
+          onClose={() => {
+            setQuickCreateDialogOpen(false);
+            setSelectedSlot(null);
+          }}
+          date={selectedSlot.date}
+          hour={selectedSlot.hour}
+          availableTherapists={availableTherapistsForSlot}
+          workingHours={workingHours}
+        />
+      )}
+
+      <AppointmentEditDialog
+        appointmentId={selectedAppointmentId}
+        onClose={() => {
+          setSelectedAppointmentId(null);
+          setSelectedAppointmentScope('this_only');
+        }}
+        initialEditScope={selectedAppointmentScope === 'all' ? 'this_and_future' : selectedAppointmentScope}
+      />
+
+      <SeriesActionDialog
+        open={seriesDialogOpen}
+        onClose={() => {
+          setSeriesDialogOpen(false);
+          setPendingSeriesContext(null);
+        }}
+        onConfirm={(scope) => {
+          if (!pendingSeriesContext) {
+            setSeriesDialogOpen(false);
+            return;
+          }
+
+          const resolvedScope = scope === 'all' ? 'this_and_future' : scope;
+
+          if (pendingSeriesContext.type === 'open_edit') {
+            setSelectedAppointmentScope(resolvedScope);
+            setSelectedAppointmentId(pendingSeriesContext.appointment.id);
+          } else if (pendingSeriesContext.type === 'move') {
+            void performAppointmentMove(
+              pendingSeriesContext.appointment,
+              resolvedScope,
+              pendingSeriesContext.target,
+            );
+          }
+
+          setSeriesDialogOpen(false);
+          setPendingSeriesContext(null);
+        }}
+        action="edit"
+        frequency={seriesDialogFrequency}
+      />
     </div>
   );
 }

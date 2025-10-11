@@ -17,6 +17,7 @@ const ADMIN_EMAILS = Array.from(
 type PublicUserProfile = Record<string, unknown> & {
   role?: string | null;
   therapist_id?: string | null;
+  must_change_password?: boolean | null;
 };
 
 function toCamelCase<T = unknown>(obj: T): T {
@@ -86,6 +87,7 @@ export async function GET() {
         email: authUser.email,
         role: fallbackRole,
         therapistId: therapistIdMeta,
+        mustChangePassword: false,
       }),
     );
   }
@@ -100,6 +102,10 @@ export async function GET() {
 
   if (!mergedProfile.therapist_id && therapistIdMeta) {
     mergedProfile.therapist_id = therapistIdMeta;
+  }
+
+  if (!('must_change_password' in mergedProfile)) {
+    mergedProfile.must_change_password = false;
   }
 
   // Merge auth user with profile

@@ -1,12 +1,30 @@
 import { NextResponse } from 'next/server';
 
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { normalizeScheduleConfig } from '@/lib/time-utils';
+import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
 
+const DEFAULT_ADMIN_EMAILS = ['uveral@gmail.com'];
+
+const ADMIN_EMAILS = new Set(
+  DEFAULT_ADMIN_EMAILS.concat(
+    (process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+);
+
 const SETTINGS_KEYS = {
-  showWeekends: 'calendar_show_weekends',
+  centerOpensAt: 'center_open_time',
+  centerClosesAt: 'center_close_time',
+  appointmentOpensAt: 'appointment_open_time',
+  appointmentClosesAt: 'appointment_close_time',
+  openOnSaturday: 'center_open_saturday',
+  openOnSunday: 'center_open_sunday',
   therapistCanViewOthers: 'therapist_can_view_others',
   therapistCanEditOthers: 'therapist_can_edit_others',
 } as const;
@@ -14,13 +32,23 @@ const SETTINGS_KEYS = {
 type SettingKey = keyof typeof SETTINGS_KEYS;
 
 interface AppSettings {
-  showWeekends: boolean;
+  centerOpensAt: string;
+  centerClosesAt: string;
+  appointmentOpensAt: string;
+  appointmentClosesAt: string;
+  openOnSaturday: boolean;
+  openOnSunday: boolean;
   therapistCanViewOthers: boolean;
   therapistCanEditOthers: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  showWeekends: false,
+  centerOpensAt: '09:00',
+  centerClosesAt: '21:00',
+  appointmentOpensAt: '09:00',
+  appointmentClosesAt: '20:00',
+  openOnSaturday: false,
+  openOnSunday: false,
   therapistCanViewOthers: false,
   therapistCanEditOthers: false,
 };
@@ -40,14 +68,70 @@ function toBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function toTime(value: unknown, fallback: string): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      const hours = Math.min(23, Math.max(0, Number.parseInt(match[1], 10)));
+      const minutes = Math.min(59, Math.max(0, Number.parseInt(match[2], 10)));
+      return `${hours.toString().padStart(2, '0')}:${minutes
+        .toString()
+        .padStart(2, '0')}`;
+    }
+  }
+
+  if (typeof value === 'number') {
+    const hours = Math.min(23, Math.max(0, Math.floor(value)));
+    return `${hours.toString().padStart(2, '0')}:00`;
+  }
+
+  return fallback;
+}
+
 function mapRowsToSettings(rows: SettingsRow[] | null): AppSettings {
   const map = new Map<string, SettingsRow>();
   rows?.forEach((row) => {
     map.set(row.key, row);
   });
 
+  const workOpensAt = toTime(
+    map.get(SETTINGS_KEYS.centerOpensAt)?.value ?? null,
+    DEFAULT_SETTINGS.centerOpensAt,
+  );
+  const workClosesAt = toTime(
+    map.get(SETTINGS_KEYS.centerClosesAt)?.value ?? null,
+    DEFAULT_SETTINGS.centerClosesAt,
+  );
+  const appointmentOpensAt = toTime(
+    map.get(SETTINGS_KEYS.appointmentOpensAt)?.value ?? null,
+    DEFAULT_SETTINGS.appointmentOpensAt,
+  );
+  const appointmentClosesAt = toTime(
+    map.get(SETTINGS_KEYS.appointmentClosesAt)?.value ?? null,
+    DEFAULT_SETTINGS.appointmentClosesAt,
+  );
+
+  const normalizedSchedule = normalizeScheduleConfig({
+    workOpensAt,
+    workClosesAt,
+    appointmentOpensAt,
+    appointmentClosesAt,
+  });
+
   return {
-    showWeekends: toBoolean(map.get(SETTINGS_KEYS.showWeekends)?.value ?? null, DEFAULT_SETTINGS.showWeekends),
+    centerOpensAt: normalizedSchedule.workOpensAt,
+    centerClosesAt: normalizedSchedule.workClosesAt,
+    appointmentOpensAt: normalizedSchedule.appointmentOpensAt,
+    appointmentClosesAt: normalizedSchedule.appointmentClosesAt,
+    openOnSaturday: toBoolean(
+      map.get(SETTINGS_KEYS.openOnSaturday)?.value ?? null,
+      DEFAULT_SETTINGS.openOnSaturday,
+    ),
+    openOnSunday: toBoolean(
+      map.get(SETTINGS_KEYS.openOnSunday)?.value ?? null,
+      DEFAULT_SETTINGS.openOnSunday,
+    ),
     therapistCanViewOthers: toBoolean(
       map.get(SETTINGS_KEYS.therapistCanViewOthers)?.value ?? null,
       DEFAULT_SETTINGS.therapistCanViewOthers,
@@ -57,6 +141,26 @@ function mapRowsToSettings(rows: SettingsRow[] | null): AppSettings {
       DEFAULT_SETTINGS.therapistCanEditOthers,
     ),
   } satisfies AppSettings;
+}
+
+function getUserMetadataValue<T = unknown>(user: SupabaseUser, key: string): T | null {
+  const fromUser = user.user_metadata?.[key];
+  const fromApp = user.app_metadata?.[key];
+  return (fromUser as T | undefined) ?? (fromApp as T | undefined) ?? null;
+}
+
+function getFallbackAuthContext(user: SupabaseUser | null) {
+  if (!user) {
+    return { role: null as string | null, therapistId: null as string | null };
+  }
+
+  const email = user.email?.toLowerCase() ?? '';
+  const metadataRole = getUserMetadataValue<string | null>(user, 'role');
+  const therapistIdMeta = getUserMetadataValue<string | null>(user, 'therapist_id');
+
+  const fallbackRole = ADMIN_EMAILS.has(email) ? 'admin' : metadataRole ?? 'therapist';
+
+  return { role: fallbackRole, therapistId: therapistIdMeta };
 }
 
 async function getCurrentUserRole() {
@@ -70,17 +174,34 @@ async function getCurrentUserRole() {
     return { status: 401 as const, role: null, therapistId: null };
   }
 
+  const fallback = getFallbackAuthContext(user);
+
   const { data: profile, error: profileError } = await supabase
     .from('users')
     .select('role, therapist_id')
     .eq('id', user.id)
     .single();
 
-  if (profileError || !profile) {
+  if (profileError) {
+    if (fallback.role) {
+      return { status: 200 as const, role: fallback.role, therapistId: fallback.therapistId };
+    }
+
     return { status: 403 as const, role: null, therapistId: null };
   }
 
-  return { status: 200 as const, role: profile.role, therapistId: profile.therapist_id };
+  if (!profile) {
+    return { status: 200 as const, role: fallback.role, therapistId: fallback.therapistId };
+  }
+
+  const role = profile.role ?? fallback.role;
+  const therapistId = profile.therapist_id ?? fallback.therapistId;
+
+  if (!role) {
+    return { status: 403 as const, role: null, therapistId };
+  }
+
+  return { status: 200 as const, role, therapistId };
 }
 
 export async function GET() {
@@ -114,25 +235,39 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const payload = (await request.json()) as Partial<Record<SettingKey, boolean>>;
+  const payload = (await request.json()) as Partial<Record<SettingKey, unknown>>;
 
-  const entries = Object.entries(payload).filter((entry): entry is [SettingKey, boolean] => {
-    const [key, value] = entry;
-    return key in SETTINGS_KEYS && typeof value === 'boolean';
+  const entries = Object.entries(payload).filter((entry): entry is [SettingKey, unknown] => {
+    const [key] = entry;
+    return key in SETTINGS_KEYS;
   });
 
   if (entries.length === 0) {
     return NextResponse.json({ error: 'No settings to update' }, { status: 400 });
   }
 
-  const adminClient = await createAdminClient();
+  const supabase = await createClient();
 
-  const upsertPayload = entries.map(([key, value]) => ({
-    key: SETTINGS_KEYS[key],
-    value,
-  }));
+  const upsertPayload = entries.map(([key, value]) => {
+    if (
+      key === 'centerOpensAt' ||
+      key === 'centerClosesAt' ||
+      key === 'appointmentOpensAt' ||
+      key === 'appointmentClosesAt'
+    ) {
+      const normalized = toTime(value, DEFAULT_SETTINGS[key]);
+      return { key: SETTINGS_KEYS[key], value: normalized };
+    }
 
-  const { error: upsertError } = await adminClient
+    if (key === 'openOnSaturday' || key === 'openOnSunday' || key === 'therapistCanViewOthers' || key === 'therapistCanEditOthers') {
+      const normalized = toBoolean(value, DEFAULT_SETTINGS[key]);
+      return { key: SETTINGS_KEYS[key], value: normalized };
+    }
+
+    return { key: SETTINGS_KEYS[key], value };
+  });
+
+  const { error: upsertError } = await supabase
     .from('settings')
     .upsert(upsertPayload, { onConflict: 'key' });
 
@@ -140,7 +275,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
-  const { data, error } = await adminClient
+  const { data, error } = await supabase
     .from('settings')
     .select('*')
     .in('key', Object.values(SETTINGS_KEYS));

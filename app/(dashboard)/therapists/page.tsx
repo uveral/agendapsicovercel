@@ -46,55 +46,8 @@ import { insertTherapistSchema, type InsertTherapist } from "@/lib/types";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Therapist, Appointment, TherapistWorkingHours } from "@/lib/types";
+import { calculateWeeklyStats } from "@/lib/therapist-stats";
 import { useAuth } from "@/contexts/AuthContext";
-
-const calculateWeeklyAvailability = (
-  appointments: Appointment[],
-  schedule: TherapistWorkingHours[]
-): number => {
-  // Calculate available hours per week
-  let availableHours = 0;
-  for (const block of schedule) {
-    const startHour = parseInt(block.startTime.split(':')[0]);
-    const startMin = parseInt(block.startTime.split(':')[1]);
-    const endHour = parseInt(block.endTime.split(':')[0]);
-    const endMin = parseInt(block.endTime.split(':')[1]);
-
-    const durationHours = (endHour * 60 + endMin - startHour * 60 - startMin) / 60;
-    availableHours += durationHours;
-  }
-
-  if (availableHours === 0) return 0;
-
-  // Get current week bounds (Monday to Sunday)
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ...
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() + mondayOffset);
-  weekStart.setHours(0, 0, 0, 0);
-
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
-
-  // Calculate occupied hours this week
-  const thisWeekAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.date);
-    return aptDate >= weekStart && aptDate <= weekEnd && apt.status !== "cancelled";
-  });
-
-  let occupiedHours = 0;
-  for (const apt of thisWeekAppointments) {
-    occupiedHours += (apt.durationMinutes || 60) / 60;
-  }
-
-  // Calculate percentage
-  const occupancyRate = (occupiedHours / availableHours) * 100;
-  const availability = Math.max(0, Math.min(100, Math.round(100 - occupancyRate)));
-
-  return availability;
-};
 
 export default function Therapists() {
   const router = useRouter();
@@ -123,8 +76,9 @@ export default function Therapists() {
     mutationFn: async (data: InsertTherapist) => {
       return await apiRequest("POST", "/api/therapists", data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/therapists"], refetchType: "active" });
+      router.refresh();
       setIsDialogOpen(false);
       form.reset();
       toast({
@@ -145,8 +99,9 @@ export default function Therapists() {
     mutationFn: async (id: string) => {
       return await apiRequest("DELETE", `/api/therapists/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/therapists"], refetchType: "active" });
+      router.refresh();
       setDeleteTherapist(null);
       toast({
         title: "Terapeuta eliminado",
@@ -193,15 +148,15 @@ export default function Therapists() {
       (wh) => wh.therapistId === therapist.id
     );
 
-    // Calculate weekly availability based on working hours and appointments
-    const availability = calculateWeeklyAvailability(
+    const { availability, occupancy } = calculateWeeklyStats(
       therapistAppointments,
-      therapistSchedule
+      therapistSchedule,
     );
 
     return {
       ...therapist,
       availability,
+      occupancy,
       upcomingAppointments,
     };
   });
@@ -279,7 +234,9 @@ export default function Therapists() {
             <TherapistCard
               key={therapist.id}
               {...therapist}
-              onViewCalendar={(id) => router.push(`/calendar?therapist=${id}`)}
+              onViewCalendar={(id) =>
+                router.push(`/calendar?view=personal&therapist=${encodeURIComponent(id)}`)
+              }
               onManageSchedule={canManageSchedule ? (id) => {
                 const therapistData = therapists.find(t => t.id === id);
                 if (therapistData) {

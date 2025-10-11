@@ -61,8 +61,9 @@ export default function Clients() {
     mutationFn: async (data: InsertManualClient) => {
       return await apiRequest("POST", "/api/clients", data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/clients"], refetchType: "active" });
+      router.refresh();
       setIsDialogOpen(false);
       form.reset();
       toast({
@@ -83,8 +84,9 @@ export default function Clients() {
     mutationFn: async (id: string) => {
       return await apiRequest("DELETE", `/api/clients/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/clients"], refetchType: "active" });
+      router.refresh();
       setDeleteClient(null);
       toast({
         title: "Cliente eliminado",

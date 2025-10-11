@@ -239,7 +239,22 @@ export async function PUT(
     );
   }
 
-  const writeClient = canEscalateWithServiceRole ? await createAdminClient() : supabase;
+  let writeClient = supabase;
+  if (canEscalateWithServiceRole) {
+    try {
+      writeClient = createAdminClient();
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'No se pudo inicializar el cliente de servicio de Supabase.',
+        },
+        { status: 503 },
+      );
+    }
+  }
 
   // Delete existing schedule
   const { error: deleteError } = await writeClient

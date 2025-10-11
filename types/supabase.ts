@@ -51,6 +51,7 @@ export type Database = {
           profile_image_url: string | null
           therapist_id: string | null
           role: 'admin' | 'therapist' | 'client'
+          must_change_password: boolean
           created_at: string
           updated_at: string
         }
@@ -63,6 +64,7 @@ export type Database = {
           profile_image_url?: string | null
           therapist_id?: string | null
           role?: 'admin' | 'therapist' | 'client'
+          must_change_password?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -75,6 +77,7 @@ export type Database = {
           profile_image_url?: string | null
           therapist_id?: string | null
           role?: 'admin' | 'therapist' | 'client'
+          must_change_password?: boolean
           created_at?: string
           updated_at?: string
         }

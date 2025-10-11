@@ -1,8 +1,5 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import type { TherapistWorkingHours } from "@shared/schema";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -11,10 +8,32 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Plus, Trash2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2, RotateCcw } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAppSettingsValue } from "@/hooks/useAppSettings";
+import { buildDayOptions, buildHourRange, deriveCenterHourBounds } from "@/lib/time-utils";
+import type { TherapistWorkingHours } from "@shared/schema";
+
+type DragState = { active: boolean; shouldSelect: boolean } | null;
+
+function serializeCells(cells: Set<string>): string {
+  return Array.from(cells).sort().join("|");
+}
+
+function parseHour(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.trim().match(/^(\d{1,2})/);
+  if (!match) {
+    return null;
+  }
+
+  const hour = Number.parseInt(match[1] ?? "", 10);
+  return Number.isFinite(hour) ? hour : null;
+}
 
 interface TherapistScheduleDialogProps {
   therapistId: string;
@@ -23,22 +42,6 @@ interface TherapistScheduleDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface ScheduleSlot {
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-}
-
-const dayNames = [
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-  "Domingo",
-];
-
 export function TherapistScheduleDialog({
   therapistId,
   therapistName,
@@ -46,217 +49,392 @@ export function TherapistScheduleDialog({
   onOpenChange,
 }: TherapistScheduleDialogProps) {
   const { toast } = useToast();
-  const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
+  const settings = useAppSettingsValue();
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [dragState, setDragState] = useState<DragState>(null);
+  const [initialSnapshot, setInitialSnapshot] = useState<string>("");
 
-  // Load existing schedule
-  const { data: existingSchedule = [], isLoading } = useQuery<TherapistWorkingHours[]>({
+  const hourBounds = useMemo(
+    () =>
+      deriveCenterHourBounds({
+        appointmentOpensAt: settings.appointmentOpensAt,
+        appointmentClosesAt: settings.appointmentClosesAt,
+        workOpensAt: settings.centerOpensAt,
+        workClosesAt: settings.centerClosesAt,
+      }),
+    [
+      settings.appointmentClosesAt,
+      settings.appointmentOpensAt,
+      settings.centerClosesAt,
+      settings.centerOpensAt,
+    ],
+  );
+
+  const { workOpeningHour, workClosingExclusive } = hourBounds;
+
+  const hours = useMemo(
+    () => buildHourRange(workOpeningHour, workClosingExclusive),
+    [workClosingExclusive, workOpeningHour],
+  );
+
+  const dayOptions = useMemo(
+    () => buildDayOptions(settings.openOnSaturday, settings.openOnSunday),
+    [settings.openOnSaturday, settings.openOnSunday],
+  );
+
+  const allowedDayValues = useMemo(() => new Set(dayOptions.map((day) => day.value)), [dayOptions]);
+
+  const {
+    data: existingSchedule = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<TherapistWorkingHours[]>({
     queryKey: ["/api/therapists", therapistId, "schedule"],
     enabled: open,
   });
 
-  // Initialize schedule slots when dialog opens or when schedule data loads from server
-  // The length check prevents overwriting user edits
-  useEffect(() => {
-    if (open) {
-      if (existingSchedule.length > 0) {
-        // Convert from DB format (0=Sunday) to UI format (0=Monday)
-        const slots = existingSchedule.map((slot) => ({
-          dayOfWeek: (slot.dayOfWeek + 6) % 7,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-        }));
-        setScheduleSlots(slots);
-      } else {
-        setScheduleSlots([]);
-      }
-    }
-  }, [open, existingSchedule]);
+  const rebuildSelectionFromSchedule = useCallback(
+    (schedule: TherapistWorkingHours[]) => {
+      const cells = new Set<string>();
 
-  // Save schedule mutation
+      schedule.forEach((slot) => {
+        if (!allowedDayValues.has(slot.dayOfWeek)) {
+          return;
+        }
+
+        const startHour = parseHour(slot?.startTime ?? null);
+        const endHour = parseHour(slot?.endTime ?? null);
+
+        if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) {
+          return;
+        }
+
+        const normalizedStart = Math.max(workOpeningHour, startHour as number);
+        const normalizedEnd = Math.min(workClosingExclusive, Math.max(normalizedStart, endHour as number));
+
+        for (let hour = normalizedStart; hour < normalizedEnd; hour++) {
+          if (hour >= workOpeningHour && hour < workClosingExclusive) {
+            cells.add(`${slot.dayOfWeek}-${hour}`);
+          }
+        }
+      });
+
+      setSelectedCells(cells);
+      setInitialSnapshot(serializeCells(cells));
+    },
+    [allowedDayValues, workClosingExclusive, workOpeningHour],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    rebuildSelectionFromSchedule(existingSchedule);
+  }, [existingSchedule, open, rebuildSelectionFromSchedule]);
+
+  useEffect(() => {
+    setSelectedCells((previous) => {
+      let changed = false;
+      const filtered = new Set<string>();
+
+      previous.forEach((key) => {
+        const [dayPart, hourPart] = key.split("-");
+        const dayValue = Number.parseInt(dayPart, 10);
+        const hourValue = Number.parseInt(hourPart, 10);
+
+        if (
+          allowedDayValues.has(dayValue) &&
+          Number.isFinite(hourValue) &&
+          hourValue >= workOpeningHour &&
+          hourValue < workClosingExclusive
+        ) {
+          filtered.add(key);
+        } else {
+          changed = true;
+        }
+      });
+
+      if (!changed && filtered.size === previous.size) {
+        return previous;
+      }
+
+      return filtered;
+    });
+  }, [allowedDayValues, workClosingExclusive, workOpeningHour]);
+
+  useEffect(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
+    const handlePointerUp = () => {
+      setDragState(null);
+    };
+
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [dragState]);
+
+  const applyCellSelection = useCallback(
+    (day: number, hour: number, shouldSelect: boolean) => {
+      if (!allowedDayValues.has(day) || hour < workOpeningHour || hour >= workClosingExclusive) {
+        return;
+      }
+
+      setSelectedCells((previous) => {
+        const next = new Set(previous);
+        const key = `${day}-${hour}`;
+
+        if (shouldSelect) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
+
+        return next;
+      });
+    },
+    [allowedDayValues, workClosingExclusive, workOpeningHour],
+  );
+
+  const toggleCell = useCallback(
+    (day: number, hour: number) => {
+      const key = `${day}-${hour}`;
+      const shouldSelect = !selectedCells.has(key);
+      applyCellSelection(day, hour, shouldSelect);
+    },
+    [applyCellSelection, selectedCells],
+  );
+
+  const handlePointerDown = useCallback(
+    (day: number, hour: number) => (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      const key = `${day}-${hour}`;
+      const shouldSelect = !selectedCells.has(key);
+
+      setDragState({ active: true, shouldSelect });
+      applyCellSelection(day, hour, shouldSelect);
+    },
+    [applyCellSelection, selectedCells],
+  );
+
+  const handlePointerEnter = useCallback(
+    (day: number, hour: number) => (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!dragState?.active) {
+        return;
+      }
+
+      event.preventDefault();
+      applyCellSelection(day, hour, dragState.shouldSelect);
+    },
+    [applyCellSelection, dragState],
+  );
+
+  const handlePointerUp = useCallback(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
+    setDragState(null);
+  }, [dragState]);
+
+  const handlePointerCancel = useCallback(() => {
+    if (!dragState?.active) {
+      return;
+    }
+
+    setDragState(null);
+  }, [dragState]);
+
+  const resetSelection = useCallback(() => {
+    rebuildSelectionFromSchedule(existingSchedule);
+  }, [existingSchedule, rebuildSelectionFromSchedule]);
+
   const saveMutation = useMutation({
-    mutationFn: async (slots: ScheduleSlot[]) => {
-      // Convert from UI format (0=Monday) to DB format (0=Sunday)
-      const dbSlots = slots.map(slot => ({
-        ...slot,
-        dayOfWeek: (slot.dayOfWeek + 1) % 7
-      }));
-      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, dbSlots);
+    mutationFn: async (data: { dayOfWeek: number; startTime: string; endTime: string }[]) => {
+      return await apiRequest("PUT", `/api/therapists/${therapistId}/schedule`, { slots: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/therapists", therapistId, "schedule"] });
       queryClient.invalidateQueries({ queryKey: ["/api/therapists"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/therapist-working-hours"] });
+      setInitialSnapshot(serializeCells(selectedCells));
       toast({
-        title: "Horario guardado",
-        description: "El horario del terapeuta ha sido actualizado exitosamente",
+        title: "Horario actualizado",
+        description: "Los bloques de trabajo se guardaron correctamente.",
       });
       onOpenChange(false);
     },
-    onError: (error: Error) => {
+    onError: (mutationError: Error) => {
       toast({
-        title: "Error",
-        description: error.message || "No se pudo guardar el horario",
+        title: "Error al guardar",
+        description: mutationError.message || "No se pudo guardar el horario del terapeuta.",
         variant: "destructive",
       });
     },
   });
 
-  const addSlot = (dayOfWeek: number) => {
-    setScheduleSlots([
-      ...scheduleSlots,
-      { dayOfWeek, startTime: "09:00", endTime: "10:00" },
-    ]);
-  };
-
-  const removeSlot = (dayOfWeek: number, index: number) => {
-    const daySlots = scheduleSlots.filter((s) => s.dayOfWeek === dayOfWeek);
-    const slotToRemove = daySlots[index];
-    setScheduleSlots(scheduleSlots.filter((s) => s !== slotToRemove));
-  };
-
-  const updateSlot = (
-    dayOfWeek: number,
-    index: number,
-    field: "startTime" | "endTime",
-    value: string
-  ) => {
-    const daySlots = scheduleSlots.filter((s) => s.dayOfWeek === dayOfWeek);
-    const slotToUpdate = daySlots[index];
-    const slotIndex = scheduleSlots.indexOf(slotToUpdate);
-
-    const newSlots = [...scheduleSlots];
-    newSlots[slotIndex] = { ...newSlots[slotIndex], [field]: value };
-    setScheduleSlots(newSlots);
-  };
-
   const handleSave = () => {
-    saveMutation.mutate(scheduleSlots);
+    const blocks: { dayOfWeek: number; startTime: string; endTime: string }[] = [];
+
+    dayOptions.forEach((day) => {
+      let blockStart: number | null = null;
+
+      for (let hour = workOpeningHour; hour <= workClosingExclusive; hour++) {
+        const isSelected =
+          hour < workClosingExclusive && selectedCells.has(`${day.value}-${hour}`);
+
+        if (isSelected && blockStart === null) {
+          blockStart = hour;
+        } else if (!isSelected && blockStart !== null) {
+          const cappedEnd = Math.min(hour, workClosingExclusive);
+          if (cappedEnd > blockStart) {
+            blocks.push({
+              dayOfWeek: day.value,
+              startTime: `${blockStart.toString().padStart(2, "0")}:00`,
+              endTime: `${cappedEnd.toString().padStart(2, "0")}:00`,
+            });
+          }
+          blockStart = null;
+        }
+      }
+
+      if (blockStart !== null) {
+        const finalEnd = workClosingExclusive;
+        if (finalEnd > blockStart) {
+          blocks.push({
+            dayOfWeek: day.value,
+            startTime: `${blockStart.toString().padStart(2, "0")}:00`,
+            endTime: `${finalEnd.toString().padStart(2, "0")}:00`,
+          });
+        }
+      }
+    });
+
+    saveMutation.mutate(blocks);
   };
+
+  const isSaving = saveMutation.isPending;
+  const hasChanges = useMemo(() => serializeCells(selectedCells) !== initialSnapshot, [selectedCells, initialSnapshot]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" data-testid="dialog-manage-schedule">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Gestionar Horario - {therapistName}</DialogTitle>
+          <DialogTitle>Gestionar horario de {therapistName}</DialogTitle>
           <DialogDescription>
-            Define los horarios de trabajo para cada día de la semana
+            Pinta los bloques en los que el terapeuta trabajará. Los horarios se ajustan automáticamente a la
+            configuración del centro.
           </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
-          <div className="py-8 text-center text-muted-foreground">
-            Cargando horarios...
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="space-y-4">
+            <p className="text-sm text-destructive">
+              {error instanceof Error ? error.message : "No se pudo cargar el horario del terapeuta."}
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+              Reintentar
+            </Button>
+          </div>
+        ) : dayOptions.length === 0 || hours.length === 0 ? (
+          <div className="py-12 text-center text-muted-foreground">
+            Configura primero los horarios y días de apertura del centro para gestionar los horarios.
           </div>
         ) : (
-          <ScrollArea className="max-h-[500px] pr-4">
-            <div className="space-y-6">
-              {dayNames.map((dayName, dayOfWeek) => {
-                const daySlots = scheduleSlots.filter(
-                  (s) => s.dayOfWeek === dayOfWeek
-                );
-
-                return (
-                  <div key={dayOfWeek} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-base font-semibold">{dayName}</Label>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addSlot(dayOfWeek)}
-                        data-testid={`button-add-slot-${dayOfWeek}`}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Añadir bloque
-                      </Button>
+          <div className="space-y-4">
+            <div className="overflow-x-auto">
+              <div className="inline-block min-w-full">
+                <div
+                  className="grid gap-px bg-border"
+                  style={{ gridTemplateColumns: `60px repeat(${dayOptions.length}, 1fr)` }}
+                >
+                  <div className="bg-background p-2" />
+                  {dayOptions.map((day) => (
+                    <div
+                      key={day.value}
+                      className="bg-background p-2 text-center text-sm font-medium"
+                      data-testid={`therapist-day-header-${day.value}`}
+                    >
+                      {day.name}
                     </div>
+                  ))}
 
-                    {daySlots.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Sin horarios definidos
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {daySlots.map((slot, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center gap-3 p-3 rounded-md border bg-card"
-                          >
-                            <div className="flex-1 grid grid-cols-2 gap-3">
-                              <div>
-                                <Label className="text-xs text-muted-foreground">
-                                  Hora inicio
-                                </Label>
-                                <Input
-                                  type="time"
-                                  value={slot.startTime}
-                                  onChange={(e) =>
-                                    updateSlot(
-                                      dayOfWeek,
-                                      index,
-                                      "startTime",
-                                      e.target.value
-                                    )
-                                  }
-                                  data-testid={`input-start-time-${dayOfWeek}-${index}`}
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground">
-                                  Hora fin
-                                </Label>
-                                <Input
-                                  type="time"
-                                  value={slot.endTime}
-                                  onChange={(e) =>
-                                    updateSlot(
-                                      dayOfWeek,
-                                      index,
-                                      "endTime",
-                                      e.target.value
-                                    )
-                                  }
-                                  data-testid={`input-end-time-${dayOfWeek}-${index}`}
-                                />
-                              </div>
-                            </div>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => removeSlot(dayOfWeek, index)}
-                              data-testid={`button-remove-slot-${dayOfWeek}-${index}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
+                  {hours.map((hour) => (
+                    <div key={hour} className="contents">
+                      <div
+                        className="bg-background p-2 text-sm text-muted-foreground text-right"
+                        data-testid={`therapist-hour-label-${hour}`}
+                      >
+                        {hour}:00
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                      {dayOptions.map((day) => {
+                        const key = `${day.value}-${hour}`;
+                        const isSelected = selectedCells.has(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                          onPointerDown={handlePointerDown(day.value, hour)}
+                          onPointerEnter={handlePointerEnter(day.value, hour)}
+                          onPointerUp={handlePointerUp}
+                          onPointerCancel={handlePointerCancel}
+                            onKeyDown={(event) => {
+                              if (event.key === " " || event.key === "Enter") {
+                                event.preventDefault();
+                                toggleCell(day.value, hour);
+                              }
+                            }}
+                            className={`p-2 min-h-[40px] transition-colors hover-elevate active-elevate-2 ${
+                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
+                            }`}
+                            aria-pressed={isSelected}
+                            data-testid={`therapist-cell-${day.value}-${hour}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </ScrollArea>
-        )}
 
-        <div className="flex gap-2 justify-end pt-4 border-t">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            data-testid="button-cancel"
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={saveMutation.isPending}
-            data-testid="button-save-schedule"
-          >
-            {saveMutation.isPending ? "Guardando..." : "Guardar horario"}
-          </Button>
-        </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetSelection}
+                disabled={isSaving || !hasChanges}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Descartar cambios
+              </Button>
+              <Button type="button" onClick={handleSave} disabled={isSaving || !hasChanges}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  "Guardar horario"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

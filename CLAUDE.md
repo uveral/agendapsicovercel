@@ -12,7 +12,7 @@ AgendaPsico is a psychology clinic scheduling management system built for Centro
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Supabase Auth
 - **UI**: Radix UI + Tailwind CSS + shadcn/ui components
-- **State Management**: TanStack Query (React Query)
+- **State Management**: TanStack Query (React Query) + Zustand (for specific UI state)
 - **PDF Generation**: jsPDF + jsPDF-autoTable
 - **Deployment**: Vercel
 - **Type Safety**: TypeScript + Zod validation
@@ -29,7 +29,7 @@ app/                    # Next.js App Router
     therapists/        # Therapist management
     clients/           # Client management
     appointments/      # Appointment management
-    calendar/          # Calendar views (calendar, calendar2, calendar3)
+    calendar/          # Calendar views (multiple implementations: calendar through calendar11)
     availability/      # Client availability management
     settings/          # App settings
   api/                 # API Routes (Next.js Route Handlers)
@@ -45,8 +45,15 @@ lib/                   # Utilities and configuration
   queryClient.ts      # TanStack Query configuration
   utils.ts            # Shared utilities (cn, etc.)
   types.ts            # Shared TypeScript types and Zod schemas
+  therapistSchedule.ts # Therapist schedule utilities
+hooks/                # Custom React hooks
+  useAppSettings.ts   # App settings management
+  useDiagnosticCalendarData.ts # Calendar diagnostic data
 types/                # TypeScript definitions
   supabase.ts         # Auto-generated Supabase types
+shared/               # Shared data and utilities
+  diagnosticCalendarData.ts # Calendar diagnostic/testing data
+  sampleCalendarData.ts    # Sample calendar data
 supabase/             # Database migrations and seeds
   migrations/         # SQL migration files
   seed.sql           # Initial seed data
@@ -136,9 +143,12 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...  # Server-only
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000  # Your app URL
+
+# Admin Configuration (optional)
+ADMIN_EMAILS=admin@example.com,other-admin@example.com  # Comma-separated emails that get auto-admin role
 ```
 
-Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser.
+Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser. The `ADMIN_EMAILS` variable automatically grants admin role to specified email addresses on signup.
 
 ## Design System
 
@@ -164,6 +174,7 @@ API routes use Next.js Route Handlers (App Router). Located in `app/api/`:
 - **Appointments**: `GET|POST /api/appointments`, `GET|PUT|DELETE /api/appointments/[id]`
 - **Working Hours**: `GET|PUT /api/therapists/[id]/schedule`
 - **Therapist Working Hours**: `GET|POST|DELETE /api/therapist-working-hours`
+- **App Settings**: `GET|PUT /api/app-settings` - Global app configuration
 
 Authorization patterns:
 - Get current user via `await supabase.auth.getUser()`
@@ -175,7 +186,7 @@ Authorization patterns:
 ### State Management
 - **Server State**: TanStack Query (configured in `lib/queryClient.ts`)
 - **UI State**: React hooks (useState, useReducer)
-- **No global state library** (Redux, Zustand, etc.)
+- **Global UI State**: Zustand for specific calendar and UI state (used selectively, not globally)
 
 ### Data Fetching
 - **Server Components**: Fetch directly with Supabase client (no React Query needed)
@@ -204,7 +215,8 @@ Authorization patterns:
 - **Supabase Required**: Must configure Supabase project and environment variables
 - **RLS Policies**: Database security enforced via Row Level Security policies in migrations
 - **Migration from Express**: This project was migrated from Express + Vite + Drizzle to Next.js + Supabase (see `MIGRATION_GUIDE.md`)
-- **Calendar Pages**: Multiple calendar implementations (calendar, calendar2, calendar3) - calendar3 is the most recent
+- **Calendar Pages**: Multiple calendar implementations (calendar through calendar11) for testing different approaches. The main calendar route (`/calendar`) is the primary implementation.
+- **Testing Data**: Use `shared/diagnosticCalendarData.ts` and `shared/sampleCalendarData.ts` for testing calendar functionality
 
 ## Testing Appointments Logic
 
