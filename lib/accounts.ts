@@ -1,4 +1,5 @@
 import { admin } from './supabase';
+import type { Database } from '@/types/supabase';
 import type { CreateAdminInput, CreateTherapistInput, UserRole } from './types';
 
 function assertTherapistColor(color?: string) {
@@ -8,7 +9,7 @@ function assertTherapistColor(color?: string) {
 export async function createTherapistAccount(input: CreateTherapistInput) {
   const { data: therapistRow, error: therapistError } = await admin
     .from('therapists')
-    .insert({
+    .insert<Database['public']['Tables']['therapists']['Insert']>({
       name: input.therapist.name,
       specialty: input.therapist.specialty,
       email: input.therapist.email ?? null,
@@ -42,15 +43,17 @@ export async function createTherapistAccount(input: CreateTherapistInput) {
     throw new Error('No user returned from Supabase Auth');
   }
 
-  const { error: upsertError } = await admin.from('users').insert({
-    id: user.id,
-    email: input.account.email,
-    first_name: input.account.first_name ?? null,
-    last_name: input.account.last_name ?? null,
-    phone: null,
-    role: 'therapist',
-    therapist_id: therapistRow.id,
-  });
+  const { error: upsertError } = await admin
+    .from('users')
+    .insert<Database['public']['Tables']['users']['Insert']>({
+      id: user.id,
+      email: input.account.email,
+      first_name: input.account.first_name ?? null,
+      last_name: input.account.last_name ?? null,
+      phone: null,
+      role: 'therapist',
+      therapist_id: therapistRow.id,
+    });
 
   if (upsertError) {
     throw upsertError;
@@ -80,15 +83,17 @@ export async function createAdminAccount(input: CreateAdminInput) {
     throw new Error('No user returned from Supabase Auth');
   }
 
-  const { error: profileError } = await admin.from('users').insert({
-    id: user.id,
-    email: input.email,
-    first_name: input.first_name ?? null,
-    last_name: input.last_name ?? null,
-    phone: null,
-    role: 'admin',
-    therapist_id: null,
-  });
+  const { error: profileError } = await admin
+    .from('users')
+    .insert<Database['public']['Tables']['users']['Insert']>({
+      id: user.id,
+      email: input.email,
+      first_name: input.first_name ?? null,
+      last_name: input.last_name ?? null,
+      phone: null,
+      role: 'admin',
+      therapist_id: null,
+    });
 
   if (profileError) {
     throw profileError;

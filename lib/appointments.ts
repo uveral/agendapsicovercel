@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { Database } from '@/types/supabase';
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled';
 
@@ -12,7 +13,7 @@ export interface CreateAppointmentInput {
 }
 
 export async function createAppointment(input: CreateAppointmentInput) {
-  const payload = {
+  const payload: Database['public']['Tables']['appointments']['Insert'] = {
     therapist_id: input.therapist_id,
     client_id: input.client_id,
     start_at: input.start_at instanceof Date ? input.start_at.toISOString() : input.start_at,
@@ -21,7 +22,11 @@ export async function createAppointment(input: CreateAppointmentInput) {
     notes: input.notes ?? null,
   };
 
-  const { data, error } = await supabase.from('appointments').insert(payload).select().single();
+  const { data, error } = await supabase
+    .from('appointments')
+    .insert<Database['public']['Tables']['appointments']['Insert']>(payload)
+    .select()
+    .single();
 
   if (error) {
     if ((error as { code?: string }).code === '23P01') {
