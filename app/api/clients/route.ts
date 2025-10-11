@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { createClient as insertClient } from '@/lib/clients';
 import { NextResponse } from 'next/server';
 
 // Helper function to convert snake_case to camelCase
@@ -34,12 +35,11 @@ function toSnakeCase<T = unknown>(obj: T): T {
 }
 
 export async function GET() {
-  const supabase = await createClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: clients, error } = await supabase
-    .from('users')
+    .from('clients')
     .select('*')
-    .eq('role', 'client')
     .order('first_name');
 
   if (error) {
@@ -50,25 +50,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
   const body = await request.json();
 
-  // Convert camelCase to snake_case for database
-  // Note: After running fix-users-table.sql in Supabase, id will auto-generate
-  const dbBody = toSnakeCase({
-    ...body,
-    role: 'client'
-  });
+  const dbBody = toSnakeCase(body);
 
-  const { data: client, error } = await supabase
-    .from('users')
-    .insert(dbBody)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const client = await insertClient(dbBody);
+    return NextResponse.json(toCamelCase(client), { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to create client';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json(toCamelCase(client), { status: 201 });
 }

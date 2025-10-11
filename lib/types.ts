@@ -15,6 +15,31 @@ export interface User {
   updatedAt?: Date | string | null;
 }
 
+export type UserRole = 'therapist' | 'admin';
+
+export interface CreateTherapistInput {
+  therapist: {
+    name: string;
+    specialty: string;
+    email?: string;
+    phone?: string;
+    color?: string;
+  };
+  account: {
+    email: string;
+    password: string;
+    first_name?: string;
+    last_name?: string;
+  };
+}
+
+export interface CreateAdminInput {
+  email: string;
+  password: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 // Schema for creating clients manually (admin/therapist action)
 export const insertManualClientSchema = z.object({
   firstName: z.string().min(1, "Nombre es requerido"),
