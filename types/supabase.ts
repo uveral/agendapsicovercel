@@ -145,50 +145,94 @@ export type Database = {
           id: string
           therapist_id: string
           client_id: string
-          date: string
-          start_time: string
-          end_time: string
+          start_at: string
+          duration: string
           status: 'pending' | 'confirmed' | 'cancelled'
           notes: string | null
+          time_span: unknown
           series_id: string | null
           frequency: 'puntual' | 'semanal' | 'quincenal'
-          duration_minutes: number
           pending_reason: string | null
           optimization_score: number | null
           created_at: string
           updated_at: string
+          // Legacy fields kept for backward compatibility during migration
+          date?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          duration_minutes?: number | null
         }
         Insert: {
           id?: string
           therapist_id: string
           client_id: string
-          date: string
-          start_time: string
-          end_time: string
+          start_at: string
+          duration?: string
           status?: 'pending' | 'confirmed' | 'cancelled'
           notes?: string | null
+          time_span?: unknown
           series_id?: string | null
           frequency?: 'puntual' | 'semanal' | 'quincenal'
-          duration_minutes?: number
           pending_reason?: string | null
           optimization_score?: number | null
           created_at?: string
           updated_at?: string
+          // Legacy fields kept for backward compatibility during migration
+          date?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          duration_minutes?: number | null
         }
         Update: {
           id?: string
           therapist_id?: string
           client_id?: string
-          date?: string
-          start_time?: string
-          end_time?: string
+          start_at?: string
+          duration?: string
           status?: 'pending' | 'confirmed' | 'cancelled'
           notes?: string | null
+          time_span?: unknown
           series_id?: string | null
           frequency?: 'puntual' | 'semanal' | 'quincenal'
-          duration_minutes?: number
           pending_reason?: string | null
           optimization_score?: number | null
+          created_at?: string
+          updated_at?: string
+          // Legacy fields kept for backward compatibility during migration
+          date?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          duration_minutes?: number | null
+        }
+      }
+      clients: {
+        Row: {
+          id: string
+          email: string | null
+          first_name: string | null
+          last_name: string | null
+          phone: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          email?: string | null
+          first_name?: string | null
+          last_name?: string | null
+          phone?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string | null
+          first_name?: string | null
+          last_name?: string | null
+          phone?: string | null
+          notes?: string | null
           created_at?: string
           updated_at?: string
         }

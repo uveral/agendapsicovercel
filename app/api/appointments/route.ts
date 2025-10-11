@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAppointment as insertAppointment } from '@/lib/appointments';
 import { NextResponse } from 'next/server';
 
 function toCamelCase<T = unknown>(obj: T): T {
@@ -31,16 +32,16 @@ function toSnakeCase<T = unknown>(obj: T): T {
 }
 
 export async function GET() {
-  const supabase = await createClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data: appointments, error } = await supabase
     .from('appointments')
     .select(`
       *,
       therapist:therapists(*),
-      client:users(*)
+      client:clients(*)
     `)
-    .order('date', { ascending: true });
+    .order('start_at', { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -50,24 +51,41 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
   const body = await request.json();
 
   const dbData = toSnakeCase(body);
+  const startAt = (() => {
+    if (dbData.start_at) {
+      return dbData.start_at as string;
+    }
 
-  const { data: appointment, error } = await supabase
-    .from('appointments')
-    .insert(dbData)
-    .select(`
-      *,
-      therapist:therapists(*),
-      client:users(*)
-    `)
-    .single();
+    // TODO: remove fallback once all callers send start_at
+    if (dbData.date && dbData.start_time) {
+      const date = String(dbData.date);
+      const time = String(dbData.start_time);
+      return new Date(`${date}T${time}:00Z`).toISOString();
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return undefined;
+  })();
+
+  if (!startAt) {
+    return NextResponse.json({ error: 'start_at is required' }, { status: 400 });
   }
 
-  return NextResponse.json(toCamelCase(appointment), { status: 201 });
+  try {
+    const appointment = await insertAppointment({
+      therapist_id: String(dbData.therapist_id),
+      client_id: String(dbData.client_id),
+      start_at: startAt,
+      duration: dbData.duration ? String(dbData.duration) : undefined,
+      status: dbData.status ? (String(dbData.status) as 'pending' | 'confirmed' | 'cancelled') : undefined,
+      notes: dbData.notes ? String(dbData.notes) : undefined,
+    });
+
+    return NextResponse.json(toCamelCase(appointment), { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to create appointment';
+    return NextResponse.json({ error: message }, { status: message === 'OVERLAP' ? 409 : 500 });
+  }
 }
